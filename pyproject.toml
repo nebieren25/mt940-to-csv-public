@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mt940-web"
+version = "0.1.0"
+description = "MT940 bank statement to CSV converter (core + CLI + web)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mt-940>=4.30.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "httpx>=0.24.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "unit: unit tests (core only)",
+    "integration: integration tests (web API)",
+]
+addopts = "-v --tb=short"

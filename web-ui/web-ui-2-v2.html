@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>MT940 Converter - Sidebar Layout</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#137fec",
+                        "primary-light": "#e0f0ff","primary-dark": "#0b4e94","neutral-surface": "#f0f4f8","background-light": "#f6f7f8",
+                        "background-dark": "#101922",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>.custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }.sidebar-scroll {
+             scrollbar-width: thin;
+             scrollbar-color: #cbd5e1 transparent;
+        }
+    </style>
+</head>
+<body class="font-display bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-200 h-screen flex flex-col md:flex-row overflow-hidden selection:bg-primary/30">
+<aside class="w-full md:w-80 lg:w-96 flex-shrink-0 bg-white dark:bg-[#15202b] border-r border-slate-200 dark:border-slate-800 flex flex-col h-full shadow-lg z-20">
+<div class="p-6 border-b border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-2 mb-1">
+<div class="w-8 h-8 rounded bg-primary flex items-center justify-center text-white">
+<span class="material-icons text-sm">currency_exchange</span>
+</div>
+<h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white">MT940 Converter</h1>
+</div>
+<p class="text-xs text-slate-500 dark:text-slate-400 font-medium pl-10">Internal Developer Tool</p>
+</div>
+<div class="flex-1 overflow-y-auto sidebar-scroll p-6 space-y-8">
+<section>
+<h2 class="text-sm font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+<span class="material-icons text-primary text-base">upload_file</span>
+                Source File
+            </h2>
+<div class="relative group">
+<input class="hidden" id="file-upload" type="file"/>
+<label class="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-primary/40 rounded-xl bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer group-hover:border-primary" for="file-upload">
+<div class="flex flex-col items-center justify-center pt-5 pb-6">
+<span class="material-icons text-primary/60 text-3xl mb-2 group-hover:scale-110 transition-transform">cloud_upload</span>
+<p class="mb-1 text-sm text-slate-600 dark:text-slate-300 font-medium">Drop MT940 file here</p>
+<p class="text-xs text-slate-400 dark:text-slate-500">or click to browse</p>
+</div>
+</label>
+</div>
+<div class="mt-3 flex items-center p-3 bg-neutral-surface dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+<span class="material-icons text-slate-500 mr-3">description</span>
+<div class="flex-1 min-w-0">
+<p class="text-sm font-medium text-slate-900 dark:text-white truncate">statement_jan_2024.txt</p>
+<p class="text-xs text-slate-500">245 KB • Ready</p>
+</div>
+<button class="text-slate-400 hover:text-red-500 transition-colors">
+<span class="material-icons text-sm">close</span>
+</button>
+</div>
+</section>
+<section>
+<h2 class="text-sm font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+<span class="material-icons text-primary text-base">tune</span>
+                Configuration
+            </h2>
+<div class="space-y-4">
+<div>
+<label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider" for="encoding">File Encoding</label>
+<div class="relative">
+<select class="block w-full pl-3 pr-10 py-2.5 text-sm border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 focus:ring-primary focus:border-primary shadow-sm dark:text-white appearance-none" id="encoding">
+<option>UTF-8 (Standard)</option>
+<option>Windows-1252 (Western)</option>
+<option>ISO-8859-1</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+<span class="material-icons text-sm">expand_more</span>
+</div>
+</div>
+</div>
+<div>
+<label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider" for="delimiter">CSV Delimiter</label>
+<div class="relative">
+<select class="block w-full pl-3 pr-10 py-2.5 text-sm border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 focus:ring-primary focus:border-primary shadow-sm dark:text-white appearance-none" id="delimiter">
+<option value=",">Comma (,)</option>
+<option value=";">Semicolon (;)</option>
+<option value="|">Pipe (|)</option>
+<option value="tab">Tab (\t)</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+<span class="material-icons text-sm">expand_more</span>
+</div>
+</div>
+</div>
+<div>
+<label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider" for="dateformat">Output Date Format</label>
+<div class="relative">
+<select class="block w-full pl-3 pr-10 py-2.5 text-sm border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 focus:ring-primary focus:border-primary shadow-sm dark:text-white appearance-none" id="dateformat">
+<option>YYYY-MM-DD</option>
+<option>DD/MM/YYYY</option>
+<option>MM/DD/YYYY</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+<span class="material-icons text-sm">expand_more</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+<div class="p-6 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-[#15202b]">
+<button class="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:shadow-lg transition-all active:scale-[0.98]">
+<span class="material-icons text-sm">download</span>
+            Download CSV
+        </button>
+<p class="text-center text-[10px] text-slate-400 mt-3">Version 2.4.0 • Build 8921</p>
+</div>
+</aside>
+<main class="flex-1 flex flex-col h-full overflow-hidden relative">
+<header class="bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-8 py-4 flex items-center justify-between z-10 sticky top-0">
+<div class="flex items-center gap-4">
+<h2 class="text-lg font-semibold text-slate-800 dark:text-white">Preview Data</h2>
+<div class="h-4 w-px bg-slate-300 dark:bg-slate-700"></div>
+<span class="text-sm text-slate-500 font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-xs border border-slate-200 dark:border-slate-700">statement_jan_2024.txt</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-primary/50 transition-colors shadow-sm">
+<span class="material-icons text-sm">content_copy</span>
+                Copy to Clipboard
+            </button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-red-500 dark:hover:text-red-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-red-200 transition-colors shadow-sm">
+<span class="material-icons text-sm">restart_alt</span>
+                Reset
+            </button>
+</div>
+</header>
+<div class="flex-1 overflow-auto custom-scrollbar bg-neutral-surface dark:bg-[#0c1219] p-8">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 min-w-[800px]">
+<div class="bg-white dark:bg-[#15202b] p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between mb-3">
+<h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Statement Period</h3>
+<span class="material-icons text-slate-400 text-lg">calendar_today</span>
+</div>
+<div class="flex flex-col gap-1">
+<div class="flex justify-between items-baseline">
+<span class="text-xs text-slate-400">Start</span>
+<span class="text-sm font-mono text-slate-800 dark:text-slate-200 font-medium">2024-01-15</span>
+</div>
+<div class="flex justify-between items-baseline">
+<span class="text-xs text-slate-400">End</span>
+<span class="text-sm font-mono text-slate-800 dark:text-slate-200 font-medium">2024-01-21</span>
+</div>
+</div>
+</div>
+<div class="bg-white dark:bg-[#15202b] p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between mb-3">
+<h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Financial Overview</h3>
+<span class="material-icons text-slate-400 text-lg">account_balance_wallet</span>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between items-center text-xs">
+<span class="text-slate-500">Income</span>
+<span class="font-mono text-green-600 dark:text-green-400 font-semibold">+1,825.50</span>
+</div>
+<div class="flex justify-between items-center text-xs">
+<span class="text-slate-500">Expenses</span>
+<span class="font-mono text-red-600 dark:text-red-400 font-semibold">-1,033.19</span>
+</div>
+<div class="h-px bg-slate-100 dark:bg-slate-700 my-1"></div>
+<div class="flex justify-between items-center">
+<span class="text-xs font-medium text-slate-700 dark:text-slate-300">Net Balance</span>
+<span class="font-mono text-slate-900 dark:text-white font-bold text-sm">+792.31</span>
+</div>
+</div>
+</div>
+<div class="bg-white dark:bg-[#15202b] p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between mb-3">
+<h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Transaction Count</h3>
+<span class="material-icons text-slate-400 text-lg">receipt_long</span>
+</div>
+<div class="flex items-end justify-between gap-4">
+<div class="flex flex-col">
+<span class="text-3xl font-mono font-bold text-slate-800 dark:text-white">8</span>
+<span class="text-[10px] text-slate-400 uppercase font-medium mt-1">Total Records</span>
+</div>
+<div class="flex gap-4">
+<div class="flex flex-col items-end">
+<span class="text-sm font-mono font-bold text-green-600 dark:text-green-400">3</span>
+<span class="text-[10px] text-slate-400">Credit</span>
+</div>
+<div class="flex flex-col items-end">
+<span class="text-sm font-mono font-bold text-red-600 dark:text-red-400">5</span>
+<span class="text-[10px] text-slate-400">Debit</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-white dark:bg-[#15202b] rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden min-w-[800px]">
+<table class="w-full text-left border-collapse">
+<thead class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+<tr>
+<th class="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-12">#</th>
+<th class="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</th>
+<th class="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Account</th>
+<th class="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Amount</th>
+<th class="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Currency</th>
+<th class="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-1/3">Description</th>
+<th class="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Reference</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800 font-mono text-xs text-slate-700 dark:text-slate-300">
+<tr class="hover:bg-primary/5 dark:hover:bg-primary/10 transition-colors">
+<td class="px-6 py-3 text-slate-400">1</td>
+<td class="px-6 py-3">2024-01-15</td>
+<td class="px-6 py-3">NL45ABNA0123456789</td>
+<td class="px-6 py-3 text-right font-bold text-green-600 dark:text-green-400">+1,250.00</td>
+<td class="px-6 py-3">EUR</td>
+<td class="px-6 py-3 truncate max-w-xs" title="MONTHLY SALARY TRANSFER REF: JAN24">MONTHLY SALARY TRANSFER REF: JAN24</td>
+<td class="px-6 py-3 text-slate-500">NONREF</td>
+</tr>
+<tr class="hover:bg-primary/5 dark:hover:bg-primary/10 transition-colors">
+<td class="px-6 py-3 text-slate-400">2</td>
+<td class="px-6 py-3">2024-01-16</td>
+<td class="px-6 py-3">NL45ABNA0123456789</td>
+<td class="px-6 py-3 text-right text-red-600 dark:text-red-400">-45.20</td>
+<td class="px-6 py-3">EUR</td>
+<td class="px-6 py-3 truncate max-w-xs" title="GROCERY STORE PAYMENT 3342">GROCERY STORE PAYMENT 3342</td>
+<td class="px-6 py-3 text-slate-500">POS9928</td>
+</tr>
+<tr class="hover:bg-primary/5 dark:hover:bg-primary/10 transition-colors">
+<td class="px-6 py-3 text-slate-400">3</td>
+<td class="px-6 py-3">2024-01-16</td>
+<td class="px-6 py-3">NL45ABNA0123456789</td>
+<td class="px-6 py-3 text-right text-red-600 dark:text-red-400">-120.00</td>
+<td class="px-6 py-3">EUR</td>
+<td class="px-6 py-3 truncate max-w-xs" title="ATM WITHDRAWAL STATION CENTRAL">ATM WITHDRAWAL STATION CENTRAL</td>
+<td class="px-6 py-3 text-slate-500">ATM0012</td>
+</tr>
+<tr class="hover:bg-primary/5 dark:hover:bg-primary/10 transition-colors">
+<td class="px-6 py-3 text-slate-400">4</td>
+<td class="px-6 py-3">2024-01-17</td>
+<td class="px-6 py-3">NL45ABNA0123456789</td>
+<td class="px-6 py-3 text-right font-bold text-green-600 dark:text-green-400">+500.00</td>
+<td class="px-6 py-3">EUR</td>
+<td class="px-6 py-3 truncate max-w-xs" title="INVOICE PAYMENT 2023-992 CONSULTING">INVOICE PAYMENT 2023-992 CONSULTING</td>
+<td class="px-6 py-3 text-slate-500">TRF4552</td>
+</tr>
+<tr class="hover:bg-primary/5 dark:hover:bg-primary/10 transition-colors">
+<td class="px-6 py-3 text-slate-400">5</td>
+<td class="px-6 py-3">2024-01-18</td>
+<td class="px-6 py-3">NL45ABNA0123456789</td>
+<td class="px-6 py-3 text-right text-red-600 dark:text-red-400">-12.99</td>
+<td class="px-6 py-3">EUR</td>
+<td class="px-6 py-3 truncate max-w-xs" title="SUBSCRIPTION SERVICE MONTHLY">SUBSCRIPTION SERVICE MONTHLY</td>
+<td class="px-6 py-3 text-slate-500">SUB8821</td>
+</tr>
+<tr class="hover:bg-primary/5 dark:hover:bg-primary/10 transition-colors">
+<td class="px-6 py-3 text-slate-400">6</td>
+<td class="px-6 py-3">2024-01-19</td>
+<td class="px-6 py-3">NL45ABNA0123456789</td>
+<td class="px-6 py-3 text-right text-red-600 dark:text-red-400">-850.00</td>
+<td class="px-6 py-3">EUR</td>
+<td class="px-6 py-3 truncate max-w-xs" title="RENT PAYMENT JANUARY">RENT PAYMENT JANUARY</td>
+<td class="px-6 py-3 text-slate-500">RNT2024</td>
+</tr>
+<tr class="hover:bg-primary/5 dark:hover:bg-primary/10 transition-colors">
+<td class="px-6 py-3 text-slate-400">7</td>
+<td class="px-6 py-3">2024-01-20</td>
+<td class="px-6 py-3">NL45ABNA0123456789</td>
+<td class="px-6 py-3 text-right font-bold text-green-600 dark:text-green-400">+75.50</td>
+<td class="px-6 py-3">EUR</td>
+<td class="px-6 py-3 truncate max-w-xs" title="REFUND UTILITIES OVERPAYMENT">REFUND UTILITIES OVERPAYMENT</td>
+<td class="px-6 py-3 text-slate-500">RFD9911</td>
+</tr>
+<tr class="hover:bg-primary/5 dark:hover:bg-primary/10 transition-colors">
+<td class="px-6 py-3 text-slate-400">8</td>
+<td class="px-6 py-3">2024-01-21</td>
+<td class="px-6 py-3">NL45ABNA0123456789</td>
+<td class="px-6 py-3 text-right text-red-600 dark:text-red-400">-5.00</td>
+<td class="px-6 py-3">EUR</td>
+<td class="px-6 py-3 truncate max-w-xs" title="BANK FEE MONTHLY">BANK FEE MONTHLY</td>
+<td class="px-6 py-3 text-slate-500">FEE001</td>
+</tr>
+</tbody>
+</table>
+<div class="bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 px-6 py-3 flex items-center justify-between">
+<span class="text-xs text-slate-500">Showing 1-8 of 142 records</span>
+<div class="flex gap-1">
+<button class="w-7 h-7 flex items-center justify-center rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-500 hover:text-primary disabled:opacity-50">
+<span class="material-icons text-sm">chevron_left</span>
+</button>
+<button class="w-7 h-7 flex items-center justify-center rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-500 hover:text-primary">
+<span class="material-icons text-sm">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<div class="mt-8 text-center text-xs text-slate-400 dark:text-slate-600 font-mono">
+                Preview generated in 42ms
+            </div>
+</div>
+</main>
+
+</body></html>

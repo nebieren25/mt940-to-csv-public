@@ -1,0 +1,223 @@
+
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Drill-Down Financial Insights Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#137fec",
+                        "primary-dark": "#0e62b6",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#101922",
+                        "card-light": "#ffffff",
+                        "card-dark": "#182430",
+                        "border-light": "#e2e4e8",
+                        "border-dark": "#2a3b4c",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "mono": ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", "monospace"],
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-200 font-display min-h-screen p-6 md:p-8">
+<div class="max-w-7xl mx-auto space-y-6">
+<header class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<h1 class="text-2xl font-bold text-slate-900 dark:text-white">Core Financial Insights</h1>
+<div class="mt-1 flex items-center gap-3">
+<div class="relative group inline-block">
+<button type="button" id="insights-files-btn" class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-primary transition-colors focus:outline-none">
+<span class="material-icons text-lg">folder_open</span>
+<span id="insights-files-count">Files loaded: 0</span>
+<span class="material-icons text-sm">expand_more</span>
+</button>
+<div id="insights-files-panel" class="absolute top-full left-0 mt-2 w-80 bg-white dark:bg-card-dark border border-border-light dark:border-border-dark rounded-xl shadow-lg z-50 hidden group-hover:block group-focus-within:block p-2">
+<div id="insights-files-list" class="space-y-1"></div>
+</div>
+</div>
+<span id="insights-currency-warning" class="hidden text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded">Mixed currency</span>
+<a class="text-sm text-primary hover:underline font-medium" href="/">Converter</a>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<input type="file" id="insights-file-input" accept=".txt,.sta,.940,.csv,.mt940" multiple class="hidden"/>
+<button type="button" id="insights-import-btn" class="flex items-center gap-2 px-4 py-2 bg-white dark:bg-card-dark border border-border-light dark:border-border-dark rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-sm text-sm font-medium text-slate-600 dark:text-slate-300">
+<span class="material-icons text-lg">upload_file</span>
+                    Import New
+                </button>
+<button type="button" id="insights-export-btn" class="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg transition-colors shadow-sm shadow-primary/20 text-sm font-medium">
+<span class="material-icons text-lg">download</span>
+                    Export Report
+                </button>
+</div>
+</header>
+<div class="flex flex-wrap items-center gap-3 bg-white dark:bg-card-dark p-3 rounded-xl border border-border-light dark:border-border-dark shadow-sm">
+<span class="material-icons text-slate-400 ml-2 mr-1">filter_list</span>
+<div class="relative group" id="insights-scope-year-wrap">
+<select id="insights-year-select" class="rounded border border-border-light dark:border-border-dark bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-white text-sm font-medium py-1.5 pl-2 pr-8 appearance-none cursor-pointer">
+<option value="">All Time</option>
+</select>
+</div>
+<div class="h-4 w-px bg-slate-200 dark:bg-slate-700"></div>
+<div class="relative group opacity-50 pointer-events-none cursor-not-allowed" id="insights-scope-quarter-wrap">
+<select id="insights-quarter-select" class="rounded border border-border-light dark:border-border-dark bg-slate-100 dark:bg-slate-900 text-slate-400 text-sm font-medium py-1.5 pl-2 pr-8 appearance-none cursor-not-allowed" disabled>
+<option value="">All</option>
+<option value="1">Q1</option>
+<option value="2">Q2</option>
+<option value="3">Q3</option>
+<option value="4">Q4</option>
+</select>
+</div>
+<div class="h-4 w-px bg-slate-200 dark:bg-slate-700"></div>
+<div class="relative group opacity-50 pointer-events-none cursor-not-allowed" id="insights-scope-month-wrap">
+<select id="insights-month-select" class="rounded border border-border-light dark:border-border-dark bg-slate-100 dark:bg-slate-900 text-slate-400 text-sm font-medium py-1.5 pl-2 pr-8 appearance-none cursor-not-allowed" disabled>
+<option value="">All</option>
+<option value="1">Jan</option>
+<option value="2">Feb</option>
+<option value="3">Mar</option>
+<option value="4">Apr</option>
+<option value="5">May</option>
+<option value="6">Jun</option>
+<option value="7">Jul</option>
+<option value="8">Aug</option>
+<option value="9">Sep</option>
+<option value="10">Oct</option>
+<option value="11">Nov</option>
+<option value="12">Dec</option>
+</select>
+</div>
+<div class="ml-auto flex items-center gap-4">
+<span id="insights-scope-label" class="text-xs font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">Scope: All Data</span>
+<button type="button" id="insights-reset" class="text-xs text-primary hover:underline font-medium px-3">Reset</button>
+</div>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+<div class="bg-white dark:bg-card-dark p-5 rounded-xl border border-border-light dark:border-border-dark shadow-sm flex flex-col justify-between">
+<div>
+<p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-2">Date Range</p>
+<p id="insights-date-range" class="text-lg font-mono font-medium text-slate-700 dark:text-slate-200">—</p>
+</div>
+<div class="mt-4 pt-4 border-t border-border-light dark:border-border-dark">
+<p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-1">Avg. Transactions</p>
+<div class="flex justify-between text-xs font-mono">
+<span id="insights-avg-inc" class="text-emerald-600">Inc: —</span>
+<span id="insights-avg-exp" class="text-rose-600">Exp: —</span>
+</div>
+</div>
+</div>
+<div class="bg-white dark:bg-card-dark p-5 rounded-xl border-l-4 border-l-emerald-500 border-y border-r border-y-border-light border-r-border-light dark:border-y-border-dark dark:border-r-border-dark shadow-sm group hover:bg-emerald-50/10 transition-colors">
+<div class="flex justify-between items-start mb-2">
+<p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Total Income</p>
+</div>
+<p id="insights-total-income" class="text-2xl font-mono font-bold text-emerald-600 dark:text-emerald-400 tracking-tight">+ $0.00</p>
+<p id="insights-total-income-count" class="text-xs text-slate-400 mt-1">Across 0 transactions</p>
+</div>
+<div class="bg-white dark:bg-card-dark p-5 rounded-xl border-l-4 border-l-rose-500 border-y border-r border-y-border-light border-r-border-light dark:border-y-border-dark dark:border-r-border-dark shadow-sm hover:bg-rose-50/10 transition-colors">
+<div class="flex justify-between items-start mb-2">
+<p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Total Expense</p>
+</div>
+<p id="insights-total-expense" class="text-2xl font-mono font-bold text-rose-600 dark:text-rose-400 tracking-tight">- $0.00</p>
+<p id="insights-total-expense-count" class="text-xs text-slate-400 mt-1">Across 0 transactions</p>
+</div>
+<div class="bg-white dark:bg-card-dark p-5 rounded-xl border-l-4 border-l-primary border-y border-r border-y-border-light border-r-border-light dark:border-y-border-dark dark:border-r-border-dark shadow-sm relative overflow-hidden">
+<div class="absolute top-0 right-0 p-2 opacity-5">
+<span class="material-icons text-6xl text-primary">account_balance_wallet</span>
+</div>
+<p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-2">Net Balance</p>
+<p id="insights-net" class="text-2xl font-mono font-bold text-primary dark:text-primary tracking-tight">$0.00</p>
+<p class="text-xs text-slate-400 mt-1">Ending balance</p>
+</div>
+<div class="bg-white dark:bg-card-dark p-5 rounded-xl border border-border-light dark:border-border-dark shadow-sm">
+<p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-2">Transactions</p>
+<div class="flex items-baseline gap-2 justify-between">
+<div>
+<p id="insights-txn-total" class="text-2xl font-mono font-bold text-slate-800 dark:text-white">0</p>
+<span class="text-xs text-slate-400">total</span>
+</div>
+<div class="text-right">
+<p id="insights-txn-in" class="text-xs text-emerald-600 font-mono font-medium">In: 0</p>
+<p id="insights-txn-out" class="text-xs text-rose-600 font-mono font-medium">Out: 0</p>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<div class="lg:col-span-2 space-y-6">
+<div class="bg-white dark:bg-card-dark rounded-xl border border-border-light dark:border-border-dark shadow-sm overflow-hidden">
+<div class="px-6 py-4 border-b border-border-light dark:border-border-dark flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20">
+<h3 class="font-semibold text-slate-800 dark:text-white">Financial Breakdown</h3>
+<div class="flex gap-2 text-xs">
+<span class="flex items-center gap-1 text-slate-500"><span class="w-2 h-2 rounded-full bg-slate-300"></span> Year</span>
+<span class="flex items-center gap-1 text-slate-500"><span class="w-2 h-2 rounded-full bg-slate-200"></span> Quarter</span>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left text-sm">
+<thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 uppercase text-xs font-semibold tracking-wider">
+<tr>
+<th class="px-4 py-3 font-medium w-1/3">Period</th>
+<th class="px-2 py-3 font-medium text-right">Income</th>
+<th class="px-2 py-3 font-medium text-right">Expense</th>
+<th class="px-2 py-3 font-medium text-right">Net</th>
+<th class="px-2 py-3 font-medium text-center">Count</th>
+<th class="px-4 py-3 font-medium text-right">Avg Txn</th>
+</tr>
+</thead>
+<tbody id="insights-breakdown-tbody" class="divide-y divide-border-light dark:divide-border-dark font-mono text-xs md:text-sm">
+</tbody>
+</table>
+</div>
+</div>
+<div class="rounded-xl border border-border-light dark:border-border-dark p-6 flex flex-col items-center justify-center bg-white dark:bg-card-dark text-center space-y-3 min-h-[200px]">
+<div class="p-3 bg-slate-50 dark:bg-slate-800 rounded-full mb-1">
+<span class="material-icons text-slate-300 dark:text-slate-600 text-4xl">ssid_chart</span>
+</div>
+<h4 class="text-sm font-semibold text-slate-700 dark:text-slate-300">Charts Coming Soon</h4>
+<p class="text-xs text-slate-400 max-w-xs">Visual analytics for income vs expense trends are currently being implemented.</p>
+</div>
+</div>
+<div class="space-y-4">
+<div class="bg-white dark:bg-card-dark rounded-xl border border-border-light dark:border-border-dark shadow-sm">
+<div class="px-4 py-3 border-b border-border-light dark:border-border-dark flex justify-between items-center">
+<h3 class="font-semibold text-slate-800 dark:text-white text-xs uppercase tracking-wide flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                            Top 5 Incomes
+                        </h3>
+</div>
+<ul id="insights-top5-incomes" class="divide-y divide-border-light dark:divide-border-dark"></ul>
+</div>
+<div class="bg-white dark:bg-card-dark rounded-xl border border-border-light dark:border-border-dark shadow-sm">
+<div class="px-4 py-3 border-b border-border-light dark:border-border-dark flex justify-between items-center">
+<h3 class="font-semibold text-slate-800 dark:text-white text-xs uppercase tracking-wide flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                            Top 5 Expenses
+                        </h3>
+</div>
+<ul id="insights-top5-expenses" class="divide-y divide-border-light dark:divide-border-dark"></ul>
+</div>
+</div>
+</div>
+<footer class="pt-6 border-t border-border-light dark:border-border-dark flex justify-between items-center text-xs text-slate-400">
+<p>© 2025 Core MT940 Converter. All rights reserved.</p>
+<div class="flex gap-4">
+<a class="hover:text-primary transition-colors" href="/">Converter</a>
+<a class="hover:text-primary transition-colors" href="/docs">API Docs</a>
+</div>
+</footer>
+</div>
+<script src="/ui/insights.js"></script>
+</body></html>
