@@ -56,16 +56,33 @@ PYTHONPATH=. python -m src.cli.main path/to/folder -d -o output_dir
 Start the FastAPI application with Uvicorn:
 
 ```bash
-PYTHONPATH=. uvicorn src.web_app:app --reload --host 127.0.0.1 --port 8000
+PYTHONPATH=. uvicorn src.web_app:app --reload --host 127.0.0.1 --port 8181
 ```
 
-- **Home:** http://127.0.0.1:8000 redirects to `/ui/web-ui-1-v3.html`.
-- **Main UI v3:** http://127.0.0.1:8000/ui/web-ui-1-v3.html provides upload, conversion, financial summary, preview, and download.
-- **UI 1:** http://127.0.0.1:8000/ui/web-ui-1.html uses a top settings panel and a lower preview table.
-- **UI 2:** http://127.0.0.1:8000/ui/web-ui-2.html uses a sidebar settings panel and a right-side preview area.
-- **API docs:** http://127.0.0.1:8000/docs
+- **Home:** http://127.0.0.1:8181 redirects to `/ui/web-ui-1-v3.html`.
+- **Main UI v3:** http://127.0.0.1:8181/ui/web-ui-1-v3.html provides upload, conversion, financial summary, preview, and download.
+- **UI 1:** http://127.0.0.1:8181/ui/web-ui-1.html uses a top settings panel and a lower preview table.
+- **UI 2:** http://127.0.0.1:8181/ui/web-ui-2.html uses a sidebar settings panel and a right-side preview area.
+- **API docs:** http://127.0.0.1:8181/docs
 
 Typical flow: select an MT940 file, convert it, review the preview table, adjust encoding, delimiter, or decimal options, then download the CSV.
+
+## Docker
+
+Build and run the production container:
+
+```bash
+docker build -t mt-copy .
+docker run --rm -p 8181:8181 mt-copy
+```
+
+The container starts Uvicorn with:
+
+```bash
+uvicorn src.web_app:app --host 0.0.0.0 --port 8181
+```
+
+For Coolify, use the Dockerfile build pack and set the application port to `8181`.
 
 ## API Summary
 
@@ -118,6 +135,8 @@ mt-copy-public/
 │   └── integration/      # Web API integration tests
 ├── requirements.txt
 ├── requirements-dev.txt
+├── Dockerfile
+├── .dockerignore
 ├── pyproject.toml
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md

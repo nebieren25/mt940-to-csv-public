@@ -3,13 +3,13 @@
 The API is served by FastAPI. Start the application first:
 
 ```bash
-PYTHONPATH=. uvicorn src.web_app:app --reload --host 127.0.0.1 --port 8000
+PYTHONPATH=. uvicorn src.web_app:app --reload --host 127.0.0.1 --port 8181
 ```
 
 Interactive documentation is available at:
 
 ```text
-http://127.0.0.1:8000/docs
+http://127.0.0.1:8181/docs
 ```
 
 ## GET `/api/options`
