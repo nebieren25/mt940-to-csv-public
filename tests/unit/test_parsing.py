@@ -22,12 +22,12 @@ class TestParseMt940Custom:
     ) -> None:
         rows, account = parse_mt940_custom(minimal_mt940_with_one_tx)
         assert len(rows) == 1
-        assert account == "NL85INGB0398076014EUR"
+        assert account == "NL00TEST0123456789EUR"
 
     def test_sample_mt940_returns_one_row(self, sample_mt940_content: str) -> None:
         rows, account = parse_mt940_custom(sample_mt940_content)
         assert len(rows) >= 1
-        assert account == "NL85INGB0398076014EUR"
+        assert account == "NL00TEST0123456789EUR"
 
     def test_first_row_has_required_fields(
         self, minimal_mt940_with_one_tx: str
@@ -53,8 +53,8 @@ class TestClearedDescription:
         assert "Some text" in out
 
     def test_strips_iban_like(self) -> None:
-        out = _cleared_description("Pay NL94INGB0709778465 recipient")
-        assert "NL94INGB0709778465" not in out
+        out = _cleared_description("Pay NL00TEST9876543210 recipient")
+        assert "NL00TEST9876543210" not in out
         assert "recipient" in out
 
     def test_strips_bic(self) -> None:

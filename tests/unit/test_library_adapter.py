@@ -28,7 +28,7 @@ class TestParseWithLibrary:
         custom_rows, custom_account = parse_mt940_custom(sample_mt940_content)
         # If library succeeds, row count should match custom; if not, custom is fallback
         assert len(custom_rows) >= 1
-        assert custom_account == "NL85INGB0398076014EUR"
+        assert custom_account == "NL00TEST0123456789EUR"
         if lib_rows is not None and len(lib_rows) > 0:
             assert len(lib_rows) == len(custom_rows)
             assert lib_account == custom_account

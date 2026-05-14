@@ -17,7 +17,7 @@ class TestContentToRows:
     ) -> None:
         rows, account = content_to_rows(sample_mt940_content)
         assert len(rows) >= 1
-        assert account == "NL85INGB0398076014EUR"
+        assert account == "NL00TEST0123456789EUR"
 
     def test_first_row_has_expected_fields(self, sample_mt940_content: str) -> None:
         rows, _ = content_to_rows(sample_mt940_content)

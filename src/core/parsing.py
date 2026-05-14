@@ -39,7 +39,7 @@ def _cleared_description(description: str) -> str:
     s = description
     for tag in DESCRIPTION_TAGS:
         s = s.replace(tag, " ")
-    # Remove IBAN-like segments (e.g. NL94INGB0709778465)
+    # Remove IBAN-like segments (e.g. NL00TEST9876543210)
     s = re.sub(r"\b[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7,10}\b", " ", s)
     # Remove BIC (e.g. INGBNL2A, ABNANL2A)
     s = re.sub(r"\b[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}\b", " ", s)
@@ -52,7 +52,7 @@ def _cleared_description(description: str) -> str:
 
 
 def _format_signed_amount(amount_str: str, debit_credit: str) -> str:
-    """Credit = +tutar, Debit = -tutar; virgüllü string (31,25 veya -31,25)."""
+    """Credit keeps the amount positive; debit makes it negative. Return comma decimals."""
     if not amount_str:
         return ""
     num_str = amount_str.replace(",", ".")
@@ -64,12 +64,12 @@ def _format_signed_amount(amount_str: str, debit_credit: str) -> str:
         num = -num
     s = f"{num:.2f}".replace(".", ",")
     if num > 0 and s[0] != "-":
-        pass  # +31,25 yerine 31,25 yazılabilir; negatifte - mutlaka
+        pass  # Positive amounts are written without a leading plus sign.
     return s
 
 
 def _parse_balance_line(line: str) -> str:
-    """:60F: veya :62F: / :64: satırından tutarı al (virgüllü)."""
+    """Extract the amount from :60F:, :62F:, or :64: and return comma decimals."""
     m = re.search(r"[DC]\d{6}[A-Z]{3}([\d,\.]+)", line)
     if not m:
         return ""

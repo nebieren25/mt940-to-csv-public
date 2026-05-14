@@ -1,14 +1,19 @@
-# MT940 → CSV
+# MT940 to CSV
 
-MT940 (SWIFT) banka ekstre dosyalarını CSV’ye dönüştüren uygulama: **core kütüphane**, **CLI** ve **web arayüzü**.  
-Mimari: Hexagonal (core’da I/O yok; CLI ve web adaptör).
+MT940 to CSV is a small Python application for converting SWIFT MT940 bank statement files into CSV. It includes a reusable core library, a command-line interface, a FastAPI backend, and static web interfaces.
 
-- **Eski proje** (değiştirilmez): `old-project/`, ayrıntı için `old-README.md`.
-- **Yeni kod**: `src/` (core + adaptörler + CLI + web) ve `web-ui/` (HTML + JS).
+The project follows a hexagonal-style layout: the core package contains parsing and conversion logic without file or web I/O, while CLI and web modules act as adapters around it.
 
----
+## Features
 
-## Kurulum
+- Convert a single MT940 file or a folder of MT940 files to CSV.
+- Upload MT940 or compatible CSV files through a web interface.
+- Preview converted transactions in the browser.
+- Export CSV with configurable encoding, delimiter, and decimal separator.
+- Compute financial summary data for uploaded statements.
+- Enforce optional upload and row limits through environment variables.
+
+## Installation
 
 ```bash
 python3 -m venv .venv
@@ -17,110 +22,117 @@ pip install -r requirements.txt
 pip install -r requirements-dev.txt   # pytest, pytest-cov
 ```
 
----
+## Tests
 
-## Testler
-
-Proje kökünden:
+Run tests from the project root:
 
 ```bash
 PYTHONPATH=. pytest tests/unit -v -m unit
 PYTHONPATH=. pytest tests/unit --cov=src/core --cov-report=term-missing
-PYTHONPATH=. pytest tests -v   # tüm testler (unit + integration)
+PYTHONPATH=. pytest tests -v   # all tests: unit + integration
 ```
 
----
+## Documentation
+
+- [Design notes](DESIGN.md)
+- [API reference](docs/API.md)
+- [Privacy notes](docs/PRIVACY.md)
+- [Security policy](SECURITY.md)
+- [Contributing guide](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+- [License](LICENSE.md)
 
 ## CLI
 
-Eski script ile aynı parametreler: `input`, `-o`, `-d`/`--folder`, `--encoding`, `--delimiter`, `--decimal`.
+The CLI accepts an input file or folder, an output path, optional folder mode, encoding, delimiter, and decimal separator settings.
 
 ```bash
 PYTHONPATH=. python -m src.cli.main path/to/file.txt -o out.csv
 PYTHONPATH=. python -m src.cli.main path/to/folder -d -o output_dir
 ```
 
----
+## Web Application
 
-## Web uygulaması
+Start the FastAPI application with Uvicorn:
 
 ```bash
 PYTHONPATH=. uvicorn src.web_app:app --reload --host 127.0.0.1 --port 8000
 ```
 
-- **Ana sayfa:** http://127.0.0.1:8000 → `/ui/web-ui-1-v3.html` adresine yönlendirir (yeni UI v3).
-- **Yeni UI v3:** http://127.0.0.1:8000/ui/web-ui-1-v3.html — upload, convert, financial summary (drill-down), preview, download.
-- **Arayüz 1:** http://127.0.0.1:8000/ui/web-ui-1.html — üstte dosya + ayar paneli, altta önizleme tablosu.
-- **Arayüz 2:** http://127.0.0.1:8000/ui/web-ui-2.html — solda sidebar (dosya + ayarlar), sağda önizleme.
-- **API dokümanı:** http://127.0.0.1:8000/docs
+- **Home:** http://127.0.0.1:8000 redirects to `/ui/web-ui-1-v3.html`.
+- **Main UI v3:** http://127.0.0.1:8000/ui/web-ui-1-v3.html provides upload, conversion, financial summary, preview, and download.
+- **UI 1:** http://127.0.0.1:8000/ui/web-ui-1.html uses a top settings panel and a lower preview table.
+- **UI 2:** http://127.0.0.1:8000/ui/web-ui-2.html uses a sidebar settings panel and a right-side preview area.
+- **API docs:** http://127.0.0.1:8000/docs
 
-Akış: MT940 dosyası seç → dönüştür → tabloda önizleme → Encoding/Delimiter/Decimal değiştirip “Download CSV” ile indir (yeniden yükleme gerekmez).
+Typical flow: select an MT940 file, convert it, review the preview table, adjust encoding, delimiter, or decimal options, then download the CSV.
 
----
+## API Summary
 
-## API özeti
+| Endpoint | Description |
+|---------|-------------|
+| GET `/api/options` | Returns allowed encodings, delimiters, decimal separators, and configured limits such as `max_upload_mb` and `max_rows`. |
+| POST `/api/convert` | Accepts multipart form data with `file`, `encoding`, `delimiter`, and `decimal_sep`. Returns JSON with `rows`, `csv`, `account`, and `row_count`; may also include `truncated` and `total_rows`. Use `?format=csv` to receive a CSV file directly. |
+| POST `/api/export` | Accepts JSON with `rows`, `delimiter`, and `decimal_sep`, then regenerates CSV output. Use `?format=csv` to receive a CSV file directly. |
 
-| Endpoint | Açıklama |
-|---------|----------|
-| GET `/api/options` | İzin verilen encoding, delimiter, decimal_sep ve limitler (max_upload_mb, max_rows). |
-| POST `/api/convert` | Multipart: `file` + form alanları `encoding`, `delimiter`, `decimal_sep`. JSON: `rows`, `csv`, `account`, `row_count`; isteğe `truncated`, `total_rows`. `?format=csv` ile doğrudan CSV dosyası. |
-| POST `/api/export` | JSON body: `rows`, `delimiter`, `decimal_sep`. Yeniden CSV üretir; `?format=csv` ile dosya cevabı. |
+Invalid parameters return **422**. Runtime errors return a JSON response such as `{"detail": "..."}`.
 
-Geçersiz parametreler → **422**. Hatalar → `{"detail": "..."}`.
+## Environment Variables
 
----
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LOG_LEVEL` | INFO | Logging level. |
+| `LOG_FILE` | unset | Optional log file path. When set, logs are also written to this file. |
+| `MAX_FILE_SIZE_MB` | 0 | If greater than 0, uploads above this size are logged as warnings. |
+| `MAX_UPLOAD_MB` | 0 | If greater than 0, uploads above this size are rejected with **413**. |
+| `MAX_ROWS` | 0 | If greater than 0, JSON responses are limited to the first N rows and include `truncated` and `total_rows`. |
 
-## Ortam değişkenleri
+## Privacy and Data Safety
 
-| Değişken | Varsayılan | Açıklama |
-|----------|------------|----------|
-| `LOG_LEVEL` | INFO | Log seviyesi. |
-| `LOG_FILE` | (yok) | Dosya yolu; verilirse log dosyaya yazılır. |
-| `MAX_FILE_SIZE_MB` | 0 | > 0 ise bu boyutu aşan yüklemelerde uyarı loglanır. |
-| `MAX_UPLOAD_MB` | 0 | > 0 ise bu boyutu aşan yüklemeler **413** ile reddedilir. |
-| `MAX_ROWS` | 0 | > 0 ise JSON cevabı ilk N satırla sınırlanır; `truncated`, `total_rows` döner. |
+Do not commit real MT940 files, exported CSV files, account numbers, IBANs, customer names, transaction descriptions, or screenshots containing financial data. Use synthetic examples only.
 
----
+Uploaded files are processed in memory for the request. The application does not intentionally store uploaded statements on disk.
 
-## Proje yapısı
+## Project Structure
 
-```
-mt-copy/
-├── old-project/          # Eski proje (dokunulmaz)
-├── old-README.md
+```text
+mt-copy-public/
+├── docs/                 # API and privacy documentation
 ├── src/
-│   ├── core/             # Domain: parsing, convert (I/O yok)
-│   │   ├── domain.py     # CSV_HEADERS, DESCRIPTION_TAGS
-│   │   ├── parsing.py    # parse_mt940_custom, yardımcılar
-│   │   ├── library_adapter.py   # mt-940 wrapper (content → rows)
-│   │   └── convert.py    # content_to_rows, rows_to_csv_string
+│   ├── core/             # Domain logic: parsing, conversion, summaries
+│   │   ├── domain.py     # CSV headers and MT940 description tags
+│   │   ├── parsing.py    # Custom MT940 parser and parsing helpers
+│   │   ├── library_adapter.py   # mt-940 library wrapper
+│   │   ├── convert.py    # Content-to-rows and rows-to-CSV helpers
+│   │   ├── csv_parse.py  # CSV upload parsing
+│   │   ├── insights.py   # Financial insight aggregations
+│   │   └── summary.py    # Financial summary calculations
 │   ├── adapters/
-│   │   ├── file_io.py    # Dosya okuma/yazma (CLI)
-│   │   └── web/          # FastAPI: routes, schemas, logging_config
-│   ├── cli/main.py       # CLI giriş noktası
-│   └── web_app.py        # FastAPI app, /ui mount, / → redirect
-├── web-ui/               # Arayüz (StaticFiles ile /ui’de sunulur)
-│   ├── web-ui-1.html
-│   ├── web-ui-2.html
-│   └── mt940-api.js      # API bağlantısı (upload, preview, download)
+│   │   ├── file_io.py    # File reading and writing for the CLI
+│   │   └── web/          # FastAPI routes, schemas, and logging config
+│   ├── cli/main.py       # CLI entry point
+│   └── web_app.py        # FastAPI app, static UI mount, and redirects
+├── web-ui/               # Static HTML and JavaScript served under /ui
 ├── tests/
-│   ├── unit/             # Core unit testleri
-│   └── integration/     # Web API testleri
+│   ├── unit/             # Core unit tests
+│   └── integration/      # Web API integration tests
 ├── requirements.txt
 ├── requirements-dev.txt
-└── pyproject.toml
+├── pyproject.toml
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── DESIGN.md
+├── LICENSE.md
+├── SECURITY.md
+└── README.md
 ```
 
----
+## Milestones
 
-## Tamamlanan aşamalar (milestone)
-
-- **M0–M1:** Core çıkarımı, pytest, unit testler.
-- **M2:** Minimal web app (upload, convert, JSON/CSV).
-- **M3:** CSV önizleme; ayar değiştirip yeniden export (POST `/api/export`).
-- **M4:** Ayar paneli + validasyon (Pydantic, 422).
-- **M5:** Hata yönetimi + logging (LOG_LEVEL, LOG_FILE, 500 handler).
-- **M6:** Limitler (MAX_UPLOAD_MB, MAX_ROWS; 413, truncation).
-- **Web UI:** `web-ui/` HTML’leri ana arayüz; `/` → `/ui/web-ui-1.html`.
-
-**Sonraki:** M7 — Docker hazırlık (ENV tabanlı config, stateless).
+- **M0-M1:** Core extraction, pytest setup, and unit tests.
+- **M2:** Minimal web application for upload, conversion, JSON, and CSV responses.
+- **M3:** CSV preview and export regeneration through `POST /api/export`.
+- **M4:** Settings panel and request validation with Pydantic.
+- **M5:** Error handling and logging through `LOG_LEVEL`, `LOG_FILE`, and a 500 handler.
+- **M6:** Upload and row limits with `MAX_UPLOAD_MB`, `MAX_ROWS`, 413 handling, and truncation metadata.
+- **Web UI:** Static browser interfaces served from `web-ui/`.

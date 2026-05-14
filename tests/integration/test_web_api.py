@@ -29,7 +29,7 @@ class TestConvertEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert data["account"] == "NL85INGB0398076014EUR"
+        assert data["account"] == "NL00TEST0123456789EUR"
         assert data["row_count"] >= 1
         assert len(data["rows"]) == data["row_count"]
         assert "entry_date" in data["rows"][0]
