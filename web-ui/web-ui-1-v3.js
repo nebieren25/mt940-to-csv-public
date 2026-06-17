@@ -23,6 +23,7 @@
     els.encoding = $("#v3-encoding") || $('select[name="encoding"]');
     els.decimalSep = $("#v3-decimal-sep") || $('select[name="decimal_sep"]');
     els.formatDates = $("#v3-format-dates");
+    els.dateSeparator = $('input[name="date_separator"]');
     els.periodStart = $("[data-v3-period-start]");
     els.periodEnd = $("[data-v3-period-end]");
     els.totalIncome = $("[data-v3-total-income]");
@@ -55,13 +56,17 @@
   function getDelimiter() {
     var radio = $('input[name="delimiter"]:checked');
     if (radio) return radio.value === "\\t" ? "\t" : radio.value;
-    return ",";
+    return ";";
   }
   function getDecimalSep() {
     return els.decimalSep ? els.decimalSep.value : ",";
   }
   function getFormatDatesIso() {
-    return els.formatDates ? els.formatDates.checked : true;
+    return els.formatDates ? els.formatDates.checked : false;
+  }
+  function getDateSeparator() {
+    var radio = $('input[name="date_separator"]:checked');
+    return radio ? radio.value : "-";
   }
 
   function parseAmount(row, decimalSep) {
@@ -99,12 +104,22 @@
     return null;
   }
 
-  function formatDateForDisplay(isoStr, useIso) {
+  function formatDateForDisplay(isoStr, useIso, separator) {
     if (!isoStr || isoStr.length < 10) return isoStr || "—";
+    var sep = separator === "/" ? "/" : "-";
     if (useIso) return isoStr.substring(0, 10);
     var p = isoStr.substring(0, 10).split("-");
     if (p.length !== 3) return isoStr;
-    return p[2] + "-" + p[1] + "-" + p[0];
+    return p[2] + sep + p[1] + sep + p[0];
+  }
+
+  function formatDateForCsv(isoStr, useIso, separator) {
+    if (!isoStr || isoStr.length < 10) return isoStr || "";
+    var sep = separator === "/" ? "/" : "-";
+    var p = isoStr.substring(0, 10).split("-");
+    if (p.length !== 3) return isoStr;
+    if (useIso) return p[0] + sep + p[1] + sep + p[2];
+    return p[2] + sep + p[1] + sep + p[0];
   }
 
   function computeOverviewTotals(rows) {
@@ -389,6 +404,7 @@
     options = options || {};
     var tbody = els.previewTbody;
     var formatDatesIso = options.formatDatesIso !== false;
+    var dateSeparator = options.dateSeparator || getDateSeparator();
     var arr = rows || [];
     var limit = options.limit != null ? options.limit : (PREVIEW_ROWS == null ? arr.length : PREVIEW_ROWS);
     if (!tbody) return;
@@ -398,7 +414,7 @@
       var row = slice[i];
       var dateStr = row.value_date || row.entry_date || "";
       var iso = parseDate(dateStr);
-      var displayDate = formatDateForDisplay(iso, formatDatesIso);
+      var displayDate = formatDateForDisplay(iso, formatDatesIso, dateSeparator);
       var amountRaw = row.signed_amount != null ? row.signed_amount : row.amount;
       var amountStr = amountRaw != null ? String(amountRaw) : "";
       var amountClass = (amountStr + "").indexOf("-") === 0 ? "text-red-500 dark:text-red-400" : "text-green-600 dark:text-green-400";
@@ -438,7 +454,7 @@
     var rows = state.rows;
     var n = rows.length;
     if (els.rowCount) els.rowCount.textContent = n;
-    renderPreviewTable(rows, { formatDatesIso: getFormatDatesIso() });
+    renderPreviewTable(rows, { formatDatesIso: getFormatDatesIso(), dateSeparator: getDateSeparator() });
     if (n === 0) {
       if (els.periodStart) els.periodStart.textContent = "—";
       if (els.periodEnd) els.periodEnd.textContent = "—";
@@ -455,6 +471,7 @@
     }
     var decSep = getDecimalSep();
     var formatIso = getFormatDatesIso();
+    var dateSeparator = getDateSeparator();
     var dates = [];
     for (var i = 0; i < rows.length; i++) {
       var d = parseDate(rows[i].value_date || rows[i].entry_date);
@@ -462,8 +479,8 @@
     }
     var minDate = dates.length ? dates.reduce(function (a, b) { return a < b ? a : b; }) : null;
     var maxDate = dates.length ? dates.reduce(function (a, b) { return a > b ? a : b; }) : null;
-    if (els.periodStart) els.periodStart.textContent = formatDateForDisplay(minDate, formatIso);
-    if (els.periodEnd) els.periodEnd.textContent = formatDateForDisplay(maxDate, formatIso);
+    if (els.periodStart) els.periodStart.textContent = formatDateForDisplay(minDate, formatIso, dateSeparator);
+    if (els.periodEnd) els.periodEnd.textContent = formatDateForDisplay(maxDate, formatIso, dateSeparator);
     var totals = computeOverviewTotals(rows);
     if (els.totalIncome) els.totalIncome.textContent = formatNum(totals.totalIncome, decSep);
     if (els.totalExpense) els.totalExpense.textContent = formatNum(totals.totalExpense, decSep);
@@ -523,6 +540,21 @@
       });
   }
 
+  function rowsForExportWithDateFormat(rows) {
+    var useIso = getFormatDatesIso();
+    var separator = getDateSeparator();
+    return (rows || []).map(function (row) {
+      var out = Object.assign({}, row);
+      var iso = parseDate(row.date || row.value_date || row.entry_date);
+      var formatted = formatDateForCsv(iso, useIso, separator);
+      if (formatted) {
+        out.date = formatted;
+        out.value_date = formatted;
+      }
+      return out;
+    });
+  }
+
   function onDownloadCsv() {
     if (state.rows.length === 0) {
       showError("No data to download. Upload an MT940 or CSV file first.");
@@ -530,7 +562,13 @@
     }
     var delim = getDelimiter();
     var decSep = getDecimalSep();
-    var useCached = state.csvFromConvert != null && state.convertDelimiter === delim && state.convertDecimalSep === decSep;
+    var datesMatchBackendDefault = getFormatDatesIso() === false && getDateSeparator() === "-";
+    var useCached = (
+      datesMatchBackendDefault &&
+      state.csvFromConvert != null &&
+      state.convertDelimiter === delim &&
+      state.convertDecimalSep === decSep
+    );
     if (useCached) {
       var blob = new Blob([state.csvFromConvert], { type: "text/csv;charset=utf-8" });
       var a = document.createElement("a");
@@ -544,7 +582,7 @@
     fetch("/api/export", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rows: state.rows, delimiter: delim, decimal_sep: decSep }),
+      body: JSON.stringify({ rows: rowsForExportWithDateFormat(state.rows), delimiter: delim, decimal_sep: decSep }),
     })
       .then(function (r) { return r.json(); })
       .then(function (data) {
@@ -571,10 +609,11 @@
     var headers = ["Row#", "Date", "Account (IBAN)", "Amount", "CCY", "Description", "Ref.ID"];
     var lines = [headers.join("\t")];
     var formatIso = getFormatDatesIso();
+    var dateSeparator = getDateSeparator();
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i];
       var dateStr = r.value_date || r.entry_date || "";
-      var displayDate = formatDateForDisplay(parseDate(dateStr), formatIso);
+      var displayDate = formatDateForDisplay(parseDate(dateStr), formatIso, dateSeparator);
       var amount = r.signed_amount != null ? r.signed_amount : r.amount;
       var cells = [
         i + 1,
@@ -624,6 +663,10 @@
     if (els.downloadBtn) els.downloadBtn.addEventListener("click", onDownloadCsv);
     if (els.resetBtn) els.resetBtn.addEventListener("click", reset);
     if (els.copyPreview) els.copyPreview.addEventListener("click", copyPreviewToClipboard);
+    if (els.formatDates) els.formatDates.addEventListener("change", updateUIFromState);
+    $$('input[name="date_separator"]').forEach(function (radio) {
+      radio.addEventListener("change", updateUIFromState);
+    });
     delegateExpandCollapse(document.body);
   }
 
