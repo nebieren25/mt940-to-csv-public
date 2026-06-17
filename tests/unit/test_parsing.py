@@ -99,6 +99,20 @@ class TestClearedDescription:
 
         assert _cleared_description(raw) == "HP Inc Instant Ink NL"
 
+    def test_card_terminal_metadata_moves_to_fields(self) -> None:
+        raw = (
+            "/REMI/USTD//BP CHARLOIS ZUIDZIJDE ROTTERDAM 01-10-2022 "
+            "18:19TERMINALID: 09298211 PASVOLGNR: 001 TRANSACTIENR: G1B6T6/"
+        )
+
+        fields = _extract_description_fields(raw)
+
+        assert fields["description"] == "BP CHARLOIS ZUIDZIJDE ROTTERDAM"
+        assert fields["payment_description"] == "BP CHARLOIS ZUIDZIJDE ROTTERDAM"
+        assert fields["card_terminal_id"] == "09298211"
+        assert fields["card_sequence_number"] == "001"
+        assert fields["card_transaction_number"] == "G1B6T6"
+
 
 @pytest.mark.unit
 class TestParseYyymmdd:

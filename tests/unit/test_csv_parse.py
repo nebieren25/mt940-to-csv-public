@@ -85,3 +85,20 @@ class TestCsvContentToRows:
         assert len(rows) == 1
         assert rows[0]["entry_date"] == "2024-03-15"
         assert rows[0]["amount"] == "5.50"
+
+    def test_card_terminal_metadata_is_split_from_description(self) -> None:
+        content = (
+            "value_date;signed_amount;description;payment_description\n"
+            "2022-10-01;-25,00;BP CHARLOIS ZUIDZIJDE ROTTERDAM 01-10-2022 "
+            "18:19TERMINALID: 09298211 PASVOLGNR: 001 TRANSACTIENR: G1B6T6;"
+            "BP CHARLOIS ZUIDZIJDE ROTTERDAM 01-10-2022 "
+            "18:19TERMINALID: 09298211 PASVOLGNR: 001 TRANSACTIENR: G1B6T6"
+        )
+
+        rows = csv_content_to_rows(content, delimiter=";")
+
+        assert rows[0]["description"] == "BP CHARLOIS ZUIDZIJDE ROTTERDAM"
+        assert rows[0]["payment_description"] == "BP CHARLOIS ZUIDZIJDE ROTTERDAM"
+        assert rows[0]["card_terminal_id"] == "09298211"
+        assert rows[0]["card_sequence_number"] == "001"
+        assert rows[0]["card_transaction_number"] == "G1B6T6"

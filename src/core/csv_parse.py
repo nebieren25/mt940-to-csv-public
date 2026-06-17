@@ -7,6 +7,7 @@ import csv
 import io
 
 from src.core.domain import CSV_HEADERS
+from src.core.parsing import apply_card_metadata_cleanup
 
 # Minimum columns needed for preview and summary: at least one date, one amount
 REQUIRED_CSV_KEYS = (
@@ -73,5 +74,5 @@ def csv_content_to_rows(content: str, delimiter: str | None = None) -> list[dict
         for h in CSV_HEADERS:
             orig_key = key_map.get(h, h)
             out[h] = raw.get(orig_key, raw.get(h, ""))
-        rows.append(out)
+        rows.append(apply_card_metadata_cleanup(out))
     return rows

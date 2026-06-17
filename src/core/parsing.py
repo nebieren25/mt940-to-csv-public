@@ -27,6 +27,12 @@ GENERIC_COUNTERPARTY_NAMES = {
     "WORLDPAY",
 }
 
+CARD_METADATA_PATTERNS = {
+    "card_terminal_id": r"TERMINALID:\s*([A-Z0-9]+)",
+    "card_sequence_number": r"PASVOLGNR:\s*([A-Z0-9]+)",
+    "card_transaction_number": r"TRANSACTIENR:\s*([A-Z0-9]+)",
+}
+
 
 def _parse_amount_str(s: str) -> str:
     """Normalize amount: comma to dot, return as string."""
@@ -80,6 +86,61 @@ def _normalize_space(value: str) -> str:
     value = value.replace("\n", " ").replace("\r", " ")
     value = re.sub(r"\s+", " ", value)
     return value.strip(" /")
+
+
+def _strip_trailing_terminal_datetime(value: str) -> str:
+    """Remove trailing card terminal date/time such as 24-03-2023 13:34."""
+    value = _normalize_space(value)
+    value = re.sub(
+        r"\s+\d{1,2}[-/]\d{1,2}[-/]\d{4}\s+\d{1,2}:\d{2}\s*$",
+        "",
+        value,
+    )
+    return _normalize_space(value)
+
+
+def _extract_card_metadata(value: str) -> dict[str, str]:
+    """Extract Dutch card/cash terminal metadata and return cleaned text plus fields."""
+    text = value or ""
+    fields = {
+        "card_terminal_id": "",
+        "card_sequence_number": "",
+        "card_transaction_number": "",
+    }
+    for key, pattern in CARD_METADATA_PATTERNS.items():
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            fields[key] = match.group(1).strip()
+        text = re.sub(r"\s*" + pattern, " ", text, flags=re.IGNORECASE)
+    text = _strip_trailing_terminal_datetime(text)
+    return {**fields, "cleaned_text": text}
+
+
+def apply_card_metadata_cleanup(row: dict) -> dict:
+    """Move card terminal metadata out of human-readable description fields."""
+    out = dict(row)
+    source = ""
+    for key in ("payment_description", "description", "cleared_description"):
+        candidate = str(out.get(key) or "")
+        if any(re.search(pattern, candidate, flags=re.IGNORECASE) for pattern in CARD_METADATA_PATTERNS.values()):
+            source = candidate
+            break
+    metadata = _extract_card_metadata(str(source))
+    has_existing_metadata = any(out.get(key) for key in CARD_METADATA_PATTERNS)
+    has_extracted_metadata = any(metadata.get(key) for key in CARD_METADATA_PATTERNS)
+    if not has_extracted_metadata and not has_existing_metadata:
+        return out
+
+    cleaned = metadata["cleaned_text"]
+    for key in CARD_METADATA_PATTERNS:
+        if metadata[key] and not out.get(key):
+            out[key] = metadata[key]
+    if cleaned:
+        out["card_terminal"] = out.get("card_terminal") or cleaned
+    for key in ("description", "cleared_description", "payment_description", "card_terminal"):
+        if out.get(key):
+            out[key] = _extract_card_metadata(str(out[key]))["cleaned_text"]
+    return out
 
 
 def _is_iban(value: str) -> bool:
@@ -160,6 +221,8 @@ def _extract_description_fields(raw_86: str) -> dict[str, str]:
     purpose_code = _normalize_space(_extract_structured_tag(raw_86, "PURP"))
     return_reason = _normalize_space(_extract_structured_tag(raw_86, "RTRN"))
     payment_description = _clean_payment_description(_extract_structured_tag(raw_86, "REMI"))
+    card_metadata = _extract_card_metadata(payment_description)
+    payment_description = card_metadata["cleaned_text"] or payment_description
     ultimate_creditor = _clean_payment_description(_extract_structured_tag(raw_86, "ULTC"))
     counterparty = _parse_counterparty(_extract_structured_tag(raw_86, "CNTP"))
 
@@ -187,6 +250,10 @@ def _extract_description_fields(raw_86: str) -> dict[str, str]:
         "return_reason": return_reason,
         "payment_description": payment_description,
         "ultimate_creditor": ultimate_creditor,
+        "card_terminal": card_metadata["cleaned_text"],
+        "card_terminal_id": card_metadata["card_terminal_id"],
+        "card_sequence_number": card_metadata["card_sequence_number"],
+        "card_transaction_number": card_metadata["card_transaction_number"],
         "description": _normalize_space(display_description),
     }
 
@@ -333,7 +400,10 @@ def parse_mt940_custom(content: str, encoding: str = "utf-8") -> tuple[list[dict
                 "return_reason": description_fields["return_reason"],
                 "payment_description": description_fields["payment_description"],
                 "ultimate_creditor": description_fields["ultimate_creditor"],
-                "card_terminal": "",
+                "card_terminal": description_fields["card_terminal"],
+                "card_terminal_id": description_fields["card_terminal_id"],
+                "card_sequence_number": description_fields["card_sequence_number"],
+                "card_transaction_number": description_fields["card_transaction_number"],
                 "description_format": "structured" if raw_86.startswith("/") else "unstructured",
                 "supplementary": "",
                 "account": account,
