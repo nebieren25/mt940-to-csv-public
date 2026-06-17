@@ -44,12 +44,30 @@ def rows_to_csv_string(
     Amount-like fields use decimal_sep (e.g. comma for Excel).
     """
     out = io.StringIO()
-    writer = csv.DictWriter(out, fieldnames=CSV_HEADERS, delimiter=delimiter)
+    writer = csv.DictWriter(
+        out,
+        fieldnames=CSV_HEADERS,
+        delimiter=delimiter,
+        extrasaction="ignore",
+    )
     writer.writeheader()
     for r in rows:
         row = dict(r)
-        for key in ("amount", "opening_balance", "closing_balance", "signed_amount"):
-            if row.get(key) and "." in str(row[key]):
-                row[key] = str(row[key]).replace(".", decimal_sep)
+        row["date"] = row.get("date") or row.get("value_date") or row.get("entry_date") or ""
+        row["description"] = (
+            row.get("description")
+            or row.get("cleared_description")
+            or row.get("counterparty_name")
+            or row.get("payment_description")
+            or ""
+        )
+        row["amount"] = row.get("amount") or row.get("signed_amount") or ""
+        for key in ("amount", "opening_balance", "closing_balance", "signed_amount", "original_amount"):
+            if row.get(key):
+                value = str(row[key]).strip()
+                if decimal_sep == ",":
+                    row[key] = value.replace(".", ",")
+                else:
+                    row[key] = value.replace(",", ".")
         writer.writerow(row)
     return out.getvalue()

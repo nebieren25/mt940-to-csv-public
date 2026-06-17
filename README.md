@@ -84,7 +84,8 @@ uvicorn src.web_app:app --host 0.0.0.0 --port 8181
 
 For Coolify, use the Dockerfile build pack and set the application port to `8181`.
 
-## API Summary
+## API Summar
+
 
 | Endpoint | Description |
 |---------|-------------|

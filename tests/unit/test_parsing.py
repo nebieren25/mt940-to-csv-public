@@ -6,6 +6,7 @@ import pytest
 
 from src.core.parsing import (
     _cleared_description,
+    _extract_description_fields,
     _format_signed_amount,
     _parse_mmdd,
     _parse_yyymmdd,
@@ -63,6 +64,40 @@ class TestClearedDescription:
 
     def test_empty_returns_empty(self) -> None:
         assert _cleared_description("") == ""
+
+    def test_structured_cleared_description_prefers_counterparty_name(self) -> None:
+        raw = (
+            "/EREF/501829643239//MARF/1.21881344//CSID/NL93ZZZ332656790051"
+            "//CNTP/NL12COBA0733959555/COBANL2XXXX/ODIDO NETHERLANDS B.V."
+            "///REMI/USTD//Factuurnummer 901525297788//PURP/OTHR/"
+        )
+
+        assert _cleared_description(raw) == "ODIDO NETHERLANDS B.V."
+
+    def test_structured_fields_keep_reference_details_separate(self) -> None:
+        raw = (
+            "/EREF/501829643239//MARF/1.21881344//CSID/NL93ZZZ332656790051"
+            "//CNTP/NL12COBA0733959555/COBANL2XXXX/ODIDO NETHERLANDS B.V."
+            "///REMI/USTD//Factuurnummer 901525297788//PURP/OTHR/"
+        )
+
+        fields = _extract_description_fields(raw)
+
+        assert fields["description"] == "ODIDO NETHERLANDS B.V."
+        assert fields["counterparty_iban"] == "NL12COBA0733959555"
+        assert fields["counterparty_bic"] == "COBANL2XXXX"
+        assert fields["payment_reference"] == "501829643239"
+        assert fields["payment_description"] == "Factuurnummer 901525297788"
+
+    def test_generic_payment_processor_prefers_payment_description(self) -> None:
+        raw = (
+            "/EREF/32064405337//MARF/M-100286980-2903926815042522"
+            "//CSID/NL23ZZZ611047600000"
+            "//CNTP/NL48ABNA0122691407/ABNANL2A/WORLDPAY"
+            "///REMI/USTD//HP Inc Instant Ink NL//ULTC/HP Inc Instant Ink NL//"
+        )
+
+        assert _cleared_description(raw) == "HP Inc Instant Ink NL"
 
 
 @pytest.mark.unit

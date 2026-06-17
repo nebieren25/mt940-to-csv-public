@@ -7,6 +7,26 @@ import re
 
 from src.core.domain import DESCRIPTION_TAGS
 
+STRUCTURED_86_TAGS = (
+    "RTRN",
+    "EREF",
+    "MARF",
+    "CSID",
+    "CNTP",
+    "REMI",
+    "PURP",
+    "ULTC",
+    "CDTR",
+    "DBTR",
+    "ORDPTY",
+    "BENEF",
+    "AB",
+)
+
+GENERIC_COUNTERPARTY_NAMES = {
+    "WORLDPAY",
+}
+
 
 def _parse_amount_str(s: str) -> str:
     """Normalize amount: comma to dot, return as string."""
@@ -36,6 +56,10 @@ def _cleared_description(description: str) -> str:
     """
     if not description:
         return ""
+    if any(f"/{tag}/" in description for tag in STRUCTURED_86_TAGS):
+        structured = _extract_description_fields(description)
+        if structured["description"]:
+            return structured["description"]
     s = description
     for tag in DESCRIPTION_TAGS:
         s = s.replace(tag, " ")
@@ -49,6 +73,139 @@ def _cleared_description(description: str) -> str:
     s = re.sub(r"[/]+", " ", s)
     s = re.sub(r"\s+", " ", s)
     return s.strip()
+
+
+def _normalize_space(value: str) -> str:
+    """Collapse whitespace and trim common MT940 separator slashes."""
+    value = value.replace("\n", " ").replace("\r", " ")
+    value = re.sub(r"\s+", " ", value)
+    return value.strip(" /")
+
+
+def _is_iban(value: str) -> bool:
+    """Return True for a simple IBAN-looking value."""
+    compact = re.sub(r"\s+", "", value or "").upper()
+    return bool(re.match(r"^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$", compact))
+
+
+def _is_bic(value: str) -> bool:
+    """Return True for a simple BIC-looking value."""
+    compact = re.sub(r"\s+", "", value or "").upper()
+    return bool(re.match(r"^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$", compact))
+
+
+def _extract_structured_tag(raw: str, tag: str) -> str:
+    """Extract a structured :86: subfield value such as /CNTP/... or /REMI/...."""
+    if not raw:
+        return ""
+    text = raw.replace("\r", "").replace("\n", "")
+    marker = f"/{tag}/"
+    start = text.find(marker)
+    if start == -1:
+        return ""
+    start += len(marker)
+    end_candidates = []
+    for next_tag in STRUCTURED_86_TAGS:
+        if next_tag == tag:
+            continue
+        for next_marker in (f"//{next_tag}/", f"/{next_tag}/"):
+            pos = text.find(next_marker, start)
+            if pos != -1:
+                end_candidates.append(pos)
+    end = min(end_candidates) if end_candidates else len(text)
+    return text[start:end].strip(" /")
+
+
+def _clean_payment_description(value: str) -> str:
+    """Normalize REMI/ULTC text and remove internal USTD formatting marker."""
+    value = value.replace("USTD//", " ").replace("USTD/", " ").replace("USTD", " ")
+    return _normalize_space(value)
+
+
+def _shorten_payment_description(value: str) -> str:
+    """Make a compact display label from a longer remittance text."""
+    value = _clean_payment_description(value)
+    for marker in (" Factuurnr.", " Factuurnummer", " Betreft IBAN", " Periode:"):
+        pos = value.lower().find(marker.lower())
+        if pos > 0:
+            return value[:pos].strip()
+    return value
+
+
+def _parse_counterparty(value: str) -> dict[str, str]:
+    """Parse /CNTP/account/bic/name into separate counterparty fields."""
+    parts = [_normalize_space(p) for p in value.split("/") if _normalize_space(p)]
+    account = parts[0] if parts else ""
+    bic = parts[1] if len(parts) > 1 and _is_bic(parts[1]) else ""
+    name_parts = parts[2:] if bic else parts[1:]
+    name = _normalize_space(" ".join(name_parts))
+    iban = re.sub(r"\s+", "", account).upper() if _is_iban(account) else ""
+    return {
+        "counterparty_name": name,
+        "counterparty_account": account,
+        "counterparty_iban": iban,
+        "counterparty_bic": bic,
+    }
+
+
+def _extract_description_fields(raw_86: str) -> dict[str, str]:
+    """
+    Split structured :86: details into CSV-friendly fields.
+    The display description prefers a real counterparty name; for payment processors
+    such as WORLDPAY it falls back to remittance or ultimate-creditor text.
+    """
+    payment_reference = _normalize_space(_extract_structured_tag(raw_86, "EREF"))
+    mandate_reference = _normalize_space(_extract_structured_tag(raw_86, "MARF"))
+    creditor_id = _normalize_space(_extract_structured_tag(raw_86, "CSID"))
+    purpose_code = _normalize_space(_extract_structured_tag(raw_86, "PURP"))
+    return_reason = _normalize_space(_extract_structured_tag(raw_86, "RTRN"))
+    payment_description = _clean_payment_description(_extract_structured_tag(raw_86, "REMI"))
+    ultimate_creditor = _clean_payment_description(_extract_structured_tag(raw_86, "ULTC"))
+    counterparty = _parse_counterparty(_extract_structured_tag(raw_86, "CNTP"))
+
+    counterparty_name = counterparty["counterparty_name"]
+    generic_counterparty = counterparty_name.upper() in GENERIC_COUNTERPARTY_NAMES
+    display_description = ""
+    if counterparty_name and not generic_counterparty:
+        display_description = counterparty_name
+    elif payment_description:
+        display_description = _shorten_payment_description(payment_description)
+    elif ultimate_creditor:
+        display_description = ultimate_creditor
+    elif counterparty_name:
+        display_description = counterparty_name
+
+    if not display_description:
+        display_description = _shorten_payment_description(raw_86)
+
+    return {
+        **counterparty,
+        "payment_reference": payment_reference,
+        "mandate_reference": mandate_reference,
+        "creditor_id": creditor_id,
+        "purpose_code": purpose_code,
+        "return_reason": return_reason,
+        "payment_description": payment_description,
+        "ultimate_creditor": ultimate_creditor,
+        "description": _normalize_space(display_description),
+    }
+
+
+def _parse_transaction_details(rest: str, amount_str: str) -> dict[str, str]:
+    """Parse the post-amount portion of a :61: line into transaction fields."""
+    tail = rest[11 + len(amount_str):]
+    transaction_type = tail[:4] if len(tail) >= 4 else ""
+    reference_part = tail[4:] if len(tail) >= 4 else tail
+    customer_ref = reference_part
+    bank_ref = ""
+    if "//" in reference_part:
+        customer_ref, bank_ref = reference_part.split("//", 1)
+    bank_ref = bank_ref.split()[0].strip() if bank_ref else ""
+    return {
+        "transaction_type": transaction_type.strip(),
+        "customer_ref": customer_ref.strip(),
+        "bank_ref": bank_ref.strip(),
+    }
 
 
 def _format_signed_amount(amount_str: str, debit_credit: str) -> str:
@@ -82,6 +239,8 @@ def parse_mt940_custom(content: str, encoding: str = "utf-8") -> tuple[list[dict
     Returns (list of transaction dicts, account).
     """
     account = ""
+    statement_number = ""
+    transaction_reference = ""
     statement_currency = ""
     statement_opening_balance = ""
     statement_closing_balance = ""
@@ -91,8 +250,16 @@ def parse_mt940_custom(content: str, encoding: str = "utf-8") -> tuple[list[dict
     i = 0
     while i < len(lines):
         line = lines[i]
+        if line.startswith(":20:"):
+            transaction_reference = line[4:].strip()
+            i += 1
+            continue
         if line.startswith(":25:"):
             account = line[4:].strip()
+            i += 1
+            continue
+        if line.startswith(":28C:"):
+            statement_number = line[5:].strip()
             i += 1
             continue
         if line.startswith(":60F:"):
@@ -121,8 +288,8 @@ def parse_mt940_custom(content: str, encoding: str = "utf-8") -> tuple[list[dict
                 continue
             amount_match = re.match(r"(\d{1,15}[,.]?\d{0,2})", rest[11:])
             amount_str = amount_match.group(1) if amount_match else ""
-            ref_match = re.search(r"N[A-Z]*REF//(\S+)", rest)
-            reference = ref_match.group(1) if ref_match else ""
+            transaction_details = _parse_transaction_details(rest, amount_str)
+            reference = transaction_details["bank_ref"] or transaction_details["customer_ref"]
             i += 1
             while i < len(lines) and lines[i].startswith("/") and not lines[i].startswith(":86:"):
                 raw_61_parts.append(lines[i].strip())
@@ -131,33 +298,56 @@ def parse_mt940_custom(content: str, encoding: str = "utf-8") -> tuple[list[dict
 
             description_parts = []
             if i < len(lines) and lines[i].startswith(":86:"):
-                description_parts.append(lines[i][4:].strip())
+                description_parts.append(lines[i][4:].rstrip())
                 i += 1
                 while i < len(lines) and not lines[i].strip().startswith(":"):
-                    description_parts.append(lines[i].strip())
+                    description_parts.append(lines[i].rstrip())
                     i += 1
-            raw_86 = " ".join(description_parts).replace("\n", " ")
-            description = raw_86.strip()
+            raw_86 = "".join(description_parts).replace("\n", " ")
+            description_fields = _extract_description_fields(raw_86)
+            description = description_fields["description"]
             raw_all_together = f"{raw_61} {raw_86}".strip()
-            cleared = _cleared_description(description)
             amt_normalized = _parse_amount_str(amount_str)
+            signed_amount = _format_signed_amount(amt_normalized, dc)
+            value_date = _parse_yyymmdd(value_date_str)
 
             transactions.append({
-                "entry_date": _parse_mmdd(entry_date_str),
-                "debit_credit": dc,
-                "amount": amt_normalized,
-                "currency": statement_currency,
-                "reference": reference,
+                "date": value_date,
                 "description": description,
+                "amount": signed_amount,
+                "value_date": value_date,
+                "entry_date": _parse_mmdd(entry_date_str),
+                "currency": statement_currency,
+                "debit_credit": dc,
+                "transaction_type": transaction_details["transaction_type"],
+                "customer_ref": transaction_details["customer_ref"],
+                "bank_ref": transaction_details["bank_ref"],
+                "counterparty_name": description_fields["counterparty_name"],
+                "counterparty_account": description_fields["counterparty_account"],
+                "counterparty_iban": description_fields["counterparty_iban"],
+                "counterparty_bic": description_fields["counterparty_bic"],
+                "payment_reference": description_fields["payment_reference"],
+                "mandate_reference": description_fields["mandate_reference"],
+                "creditor_id": description_fields["creditor_id"],
+                "purpose_code": description_fields["purpose_code"],
+                "return_reason": description_fields["return_reason"],
+                "payment_description": description_fields["payment_description"],
+                "ultimate_creditor": description_fields["ultimate_creditor"],
+                "card_terminal": "",
+                "description_format": "structured" if raw_86.startswith("/") else "unstructured",
+                "supplementary": "",
+                "account": account,
+                "statement_number": statement_number,
+                "transaction_reference": transaction_reference,
+                "opening_balance": statement_opening_balance,
+                "closing_balance": statement_closing_balance,
+                "original_amount": amt_normalized,
+                "signed_amount": signed_amount,
+                "reference": reference,
+                "cleared_description": description,
                 "raw_61": raw_61,
                 "raw_86": raw_86,
                 "raw_all_together": raw_all_together,
-                "account": account,
-                "opening_balance": statement_opening_balance,
-                "closing_balance": statement_closing_balance,
-                "value_date": _parse_yyymmdd(value_date_str),
-                "cleared_description": cleared,
-                "signed_amount": _format_signed_amount(amt_normalized, dc),
             })
             continue
         i += 1

@@ -5,6 +5,7 @@ Returns (rows, account) or (None, None) on failure.
 
 from src.core.parsing import (
     _cleared_description,
+    _extract_description_fields,
     _format_signed_amount,
     _read_balances_from_content,
 )
@@ -47,22 +48,47 @@ def parse_with_library(content: str, encoding: str = "utf-8") -> tuple[list[dict
             if hasattr(t, "transaction_details"):
                 desc = getattr(t.transaction_details, "value", desc) or desc
             desc_str = str(desc) if desc else ""
+            description_fields = _extract_description_fields(desc_str)
+            clean_description = description_fields["description"] or _cleared_description(desc_str)
+            signed_amount = _format_signed_amount(amount_str, dc)
+            value_date = getattr(t.date, "strftime", lambda x: str(t.date))("%d-%m-%Y") if hasattr(t, "date") and t.date else ""
             rows.append({
+                "date": value_date,
+                "description": clean_description,
+                "amount": signed_amount,
+                "value_date": value_date,
                 "entry_date": "",
-                "debit_credit": dc,
-                "amount": amount_str,
                 "currency": getattr(amt, "currency", "") or "",
-                "reference": getattr(t, "id", "") or getattr(t, "reference", "") or "",
-                "description": desc_str,
-                "raw_61": "",
-                "raw_86": "",
-                "raw_all_together": "",
+                "debit_credit": dc,
+                "transaction_type": "",
+                "customer_ref": "",
+                "bank_ref": "",
+                "counterparty_name": description_fields["counterparty_name"],
+                "counterparty_account": description_fields["counterparty_account"],
+                "counterparty_iban": description_fields["counterparty_iban"],
+                "counterparty_bic": description_fields["counterparty_bic"],
+                "payment_reference": description_fields["payment_reference"],
+                "mandate_reference": description_fields["mandate_reference"],
+                "creditor_id": description_fields["creditor_id"],
+                "purpose_code": description_fields["purpose_code"],
+                "return_reason": description_fields["return_reason"],
+                "payment_description": description_fields["payment_description"],
+                "ultimate_creditor": description_fields["ultimate_creditor"],
+                "card_terminal": "",
+                "description_format": "structured" if desc_str.startswith("/") else "unstructured",
+                "supplementary": "",
                 "account": account,
+                "statement_number": "",
+                "transaction_reference": "",
                 "opening_balance": opening_balance,
                 "closing_balance": closing_balance,
-                "value_date": getattr(t.date, "strftime", lambda x: str(t.date))("%d-%m-%Y") if hasattr(t, "date") and t.date else "",
-                "cleared_description": _cleared_description(desc_str),
-                "signed_amount": _format_signed_amount(amount_str, dc),
+                "original_amount": amount_str,
+                "signed_amount": signed_amount,
+                "reference": getattr(t, "id", "") or getattr(t, "reference", "") or "",
+                "raw_61": "",
+                "raw_86": desc_str,
+                "raw_all_together": desc_str,
+                "cleared_description": clean_description,
             })
         if rows and not account and hasattr(transactions_obj, "data"):
             acc_val = transactions_obj.data.get("account_identification") or transactions_obj.data.get("account")
