@@ -152,6 +152,16 @@ class TestConvertEndpoint:
         assert "MT940" in response.text
         assert "Download CSV" in response.text
 
+    def test_ui_v3_uses_cache_busted_preview_script(self, client: TestClient) -> None:
+        response = client.get("/ui/web-ui-1-v3.html")
+        assert response.status_code == 200
+        assert "/ui/web-ui-1-v3.js?v=20260626-preview-columns" in response.text
+
+    def test_ui_static_assets_revalidate_cache(self, client: TestClient) -> None:
+        response = client.get("/ui/web-ui-1-v3.js")
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-cache, max-age=0, must-revalidate"
+
 
 @pytest.mark.integration
 class TestExportEndpoint:

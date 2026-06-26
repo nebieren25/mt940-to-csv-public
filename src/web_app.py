@@ -26,6 +26,13 @@ def create_app() -> FastAPI:
     )
     app.include_router(api_router)
 
+    @app.middleware("http")
+    async def add_static_cache_headers(request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/ui/"):
+            response.headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate"
+        return response
+
     async def unhandled_exception_handler(request, exc: Exception) -> JSONResponse:
         """Return consistent 500 with detail; log full exception."""
         logger.exception("Unhandled exception: %s", exc)
