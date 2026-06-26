@@ -1,19 +1,28 @@
 """
 Pydantic schemas for web API request/response.
-Validation: encoding, delimiter, decimal_sep (M4).
+Validation: encoding, delimiter, decimal_sep, parser/profile options (M4).
 """
 
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.core.domain import BANK_PROFILES, DESCRIPTION_STYLES
+
 # Allowed values for API validation (422 if invalid)
 ALLOWED_ENCODINGS = ("utf-8", "latin-1", "cp1252", "iso-8859-1", "windows-1252")
 ALLOWED_DELIMITERS = (",", ";", "\t")
 ALLOWED_DECIMAL_SEP = (".", ",")
+ALLOWED_BANK_PROFILES = BANK_PROFILES
+ALLOWED_DESCRIPTION_STYLES = DESCRIPTION_STYLES
 
 DelimiterType = Literal[",", ";", "\t"]
 DecimalSepType = Literal[".", ","]
+DescriptionStyleType = Literal[
+    "counterparty",
+    "counterparty_with_description",
+    "sepa_overboeking_with_description",
+]
 
 
 class DateRangeSummary(BaseModel):
@@ -65,6 +74,10 @@ class ExportRequest(BaseModel):
     rows: list[dict] = Field(..., description="Transaction rows from /api/convert")
     delimiter: DelimiterType = Field(default=",", description="CSV field delimiter: , ; or tab")
     decimal_sep: DecimalSepType = Field(default=",", description="Decimal separator: . or ,")
+    description_style: DescriptionStyleType = Field(
+        default="sepa_overboeking_with_description",
+        description="How to build the first readable description column",
+    )
 
 
 class ExportResponse(BaseModel):

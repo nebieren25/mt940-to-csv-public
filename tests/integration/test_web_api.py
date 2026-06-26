@@ -195,6 +195,29 @@ class TestExportEndpoint:
         assert "attachment" in export_resp.headers.get("content-disposition", "")
         assert "entry_date" in export_resp.text
 
+    def test_export_applies_description_style(self, client: TestClient) -> None:
+        rows = [{
+            "date": "02-01-2024",
+            "description": "Hr R van Balen",
+            "amount": "-10,00",
+            "counterparty_name": "Hr R van Balen",
+            "payment_description": "factuur: 2021636",
+            "bank_transaction_label": "SEPA Overboeking",
+        }]
+
+        response = client.post(
+            "/api/export",
+            json={
+                "rows": rows,
+                "delimiter": ";",
+                "decimal_sep": ",",
+                "description_style": "sepa_overboeking_with_description",
+            },
+        )
+
+        assert response.status_code == 200
+        assert "Hr R van Balen - factuur: 2021636" in response.json()["csv"]
+
 
 @pytest.mark.integration
 class TestValidation422:
@@ -254,8 +277,44 @@ class TestValidation422:
         data = response.json()
         assert "encodings" in data
         assert "utf-8" in data["encodings"]
+        assert "bank_profiles" in data
+        assert any(item["value"] == "abn" for item in data["bank_profiles"])
+        assert "description_styles" in data
+        assert any(item["value"] == "sepa_overboeking_with_description" for item in data["description_styles"])
         assert "delimiters" in data
         assert "decimal_sep" in data
+
+    def test_convert_invalid_bank_profile_returns_422(
+        self, client: TestClient, sample_mt940_content: str
+    ) -> None:
+        response = client.post(
+            "/api/convert",
+            files={"file": ("x.txt", sample_mt940_content.encode("utf-8"), "text/plain")},
+            data={
+                "encoding": "utf-8",
+                "delimiter": ",",
+                "decimal_sep": ",",
+                "bank_profile": "unknown",
+            },
+        )
+        assert response.status_code == 422
+        assert "bank_profile" in response.json().get("detail", "").lower()
+
+    def test_convert_invalid_description_style_returns_422(
+        self, client: TestClient, sample_mt940_content: str
+    ) -> None:
+        response = client.post(
+            "/api/convert",
+            files={"file": ("x.txt", sample_mt940_content.encode("utf-8"), "text/plain")},
+            data={
+                "encoding": "utf-8",
+                "delimiter": ",",
+                "decimal_sep": ",",
+                "description_style": "unknown",
+            },
+        )
+        assert response.status_code == 422
+        assert "description_style" in response.json().get("detail", "").lower()
 
 
 @pytest.mark.integration

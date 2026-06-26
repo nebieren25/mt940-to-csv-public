@@ -88,6 +88,7 @@ class TestClearedDescription:
         assert fields["counterparty_bic"] == "COBANL2XXXX"
         assert fields["payment_reference"] == "501829643239"
         assert fields["payment_description"] == "Factuurnummer 901525297788"
+        assert fields["card_terminal"] == ""
 
     def test_generic_payment_processor_prefers_payment_description(self) -> None:
         raw = (
@@ -112,6 +113,41 @@ class TestClearedDescription:
         assert fields["card_terminal_id"] == "09298211"
         assert fields["card_sequence_number"] == "001"
         assert fields["card_transaction_number"] == "G1B6T6"
+
+    def test_abn_sepa_description_fields(self) -> None:
+        raw = (
+            "0001 SEPA Overboeking | (02-01) IBAN: NL98INGB0008565296 | BIC:"
+            "?20INGBNL2A | Naam: Hr R van Balen | Omschrijving: factuur: 2021636"
+            "?21| Kenmerk: NOTPROVIDED"
+        )
+
+        fields = _extract_description_fields(raw)
+
+        assert fields["description_format"] == "abn"
+        assert fields["supplementary"] == "0001"
+        assert fields["bank_transaction_label"] == "SEPA Overboeking"
+        assert fields["description"] == "Hr R van Balen"
+        assert fields["counterparty_name"] == "Hr R van Balen"
+        assert fields["counterparty_iban"] == "NL98INGB0008565296"
+        assert fields["counterparty_bic"] == "INGBNL2A"
+        assert fields["payment_description"] == "factuur: 2021636"
+        assert fields["payment_reference"] == ""
+
+    def test_abn_bea_card_fields(self) -> None:
+        raw = (
+            "0057 BEA, Betaalpas | (08-04) Action 1354,PAS224 | "
+            "NR:72131213?2008.04.22/11.21 | Spijkenisse"
+        )
+
+        fields = _extract_description_fields(raw)
+
+        assert fields["description_format"] == "abn"
+        assert fields["supplementary"] == "0057"
+        assert fields["bank_transaction_label"] == "BEA, Betaalpas"
+        assert fields["description"] == "Action 1354 Spijkenisse"
+        assert fields["card_terminal"] == "Action 1354 Spijkenisse"
+        assert fields["card_terminal_id"] == "72131213"
+        assert fields["card_sequence_number"] == "224"
 
 
 @pytest.mark.unit

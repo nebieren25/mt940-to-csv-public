@@ -2,6 +2,16 @@
 Domain constants: CSV schema and description tags.
 """
 
+DEFAULT_BANK_PROFILE = "auto"
+DEFAULT_DESCRIPTION_STYLE = "sepa_overboeking_with_description"
+
+BANK_PROFILES = ("auto", "ing", "abn", "rabo", "knab", "raw")
+DESCRIPTION_STYLES = (
+    "counterparty",
+    "counterparty_with_description",
+    "sepa_overboeking_with_description",
+)
+
 # CSV column headers (order used for output). Keep the first three columns
 # optimized for review/accounting; keep the remaining columns detailed enough
 # to avoid going back to the MT940 source for normal checks.
@@ -14,6 +24,7 @@ CSV_HEADERS = [
     "currency",
     "debit_credit",
     "transaction_type",
+    "bank_transaction_label",
     "customer_ref",
     "bank_ref",
     "counterparty_name",

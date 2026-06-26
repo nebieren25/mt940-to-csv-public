@@ -8,14 +8,17 @@ import os
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 
-from src.core.convert import content_to_rows, rows_to_csv_string
+from src.core.convert import apply_description_style, content_to_rows, rows_to_csv_string
 from src.core.csv_parse import CSVColumnError, csv_content_to_rows
+from src.core.domain import DEFAULT_BANK_PROFILE, DEFAULT_DESCRIPTION_STYLE
 from src.core.summary import compute_financial_summary
 
 from .logging_config import get_logger
 from .schemas import (
+    ALLOWED_BANK_PROFILES,
     ALLOWED_DECIMAL_SEP,
     ALLOWED_DELIMITERS,
+    ALLOWED_DESCRIPTION_STYLES,
     ALLOWED_ENCODINGS,
     ConvertResponse,
     ExportRequest,
@@ -39,9 +42,22 @@ MAX_ROWS = int(os.environ.get("MAX_ROWS", "0") or 0)
 
 @router.get("/options")
 def get_options() -> dict:
-    """Return allowed values for encoding, delimiter, decimal_sep; and limits (M6)."""
+    """Return allowed values for conversion settings and limits (M6)."""
     return {
         "encodings": list(ALLOWED_ENCODINGS),
+        "bank_profiles": [
+            {"value": "auto", "label": "Auto"},
+            {"value": "ing", "label": "ING / Structured MT940"},
+            {"value": "abn", "label": "ABN AMRO STA"},
+            {"value": "rabo", "label": "Rabobank"},
+            {"value": "knab", "label": "Knab"},
+            {"value": "raw", "label": "Raw fallback"},
+        ],
+        "description_styles": [
+            {"value": "sepa_overboeking_with_description", "label": "Counterparty + omschrijving for SEPA Overboeking"},
+            {"value": "counterparty", "label": "Counterparty only"},
+            {"value": "counterparty_with_description", "label": "Counterparty + omschrijving"},
+        ],
         "delimiters": [
             {"value": ",", "label": "Comma (,)"},
             {"value": ";", "label": "Semicolon (;)"},
@@ -62,6 +78,8 @@ def _validate_convert_options(
     encoding: str,
     delimiter: str,
     decimal_sep: str,
+    bank_profile: str,
+    description_style: str,
 ) -> None:
     """Raise 422 if any option is not allowed."""
     if encoding not in ALLOWED_ENCODINGS:
@@ -79,6 +97,16 @@ def _validate_convert_options(
             status_code=422,
             detail=f"Invalid decimal_sep. Allowed: . or ,",
         )
+    if bank_profile not in ALLOWED_BANK_PROFILES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid bank_profile. Allowed: {', '.join(ALLOWED_BANK_PROFILES)}",
+        )
+    if description_style not in ALLOWED_DESCRIPTION_STYLES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid description_style. Allowed: {', '.join(ALLOWED_DESCRIPTION_STYLES)}",
+        )
 
 
 @router.post("/convert", response_model=None)
@@ -87,14 +115,16 @@ async def convert_mt940(
     encoding: str = Form("utf-8"),
     delimiter: str = Form(","),
     decimal_sep: str = Form(","),
+    bank_profile: str = Form(DEFAULT_BANK_PROFILE),
+    description_style: str = Form(DEFAULT_DESCRIPTION_STYLE),
     format: str | None = Query(None, alias="format", description="Set to 'csv' for file download"),
 ) -> ConvertResponse | Response:
     """
     Upload MT940 file and convert to CSV.
     Returns JSON with rows and CSV string, or raw CSV file if format=csv.
-    Validates encoding, delimiter, decimal_sep (422 if invalid).
+    Validates encoding, delimiter, decimal_sep, bank_profile, description_style (422 if invalid).
     """
-    _validate_convert_options(encoding, delimiter, decimal_sep)
+    _validate_convert_options(encoding, delimiter, decimal_sep, bank_profile, description_style)
     try:
         raw = await file.read()
     except Exception as e:
@@ -129,9 +159,15 @@ async def convert_mt940(
             rows = csv_content_to_rows(content)
         except CSVColumnError as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
+        rows = apply_description_style(rows, description_style)
         account = ""
     else:
-        rows, account = content_to_rows(content, encoding)
+        rows, account = content_to_rows(
+            content,
+            encoding,
+            bank_profile=bank_profile,
+            description_style=description_style,
+        )
 
     if not rows:
         logger.info("No transactions in file: %s", file.filename or "?")
@@ -165,7 +201,12 @@ async def convert_mt940(
             account or "?",
         )
 
-    csv_string = rows_to_csv_string(rows, delimiter=delimiter, decimal_sep=decimal_sep)
+    csv_string = rows_to_csv_string(
+        rows,
+        delimiter=delimiter,
+        decimal_sep=decimal_sep,
+        description_style=description_style,
+    )
     summary_dict = compute_financial_summary(rows)
     summary = FinancialSummary.model_validate(summary_dict) if summary_dict else None
 
@@ -202,6 +243,7 @@ async def export_csv(
         body.rows,
         delimiter=body.delimiter,
         decimal_sep=body.decimal_sep,
+        description_style=body.description_style,
     )
     if format == "csv":
         return Response(

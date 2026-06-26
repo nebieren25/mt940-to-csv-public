@@ -6,6 +6,7 @@
   "use strict";
 
   var MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  var GENERIC_COUNTERPARTY_NAMES = { "WORLDPAY": true };
   /** Show all rows in preview (no limit). */
   var PREVIEW_ROWS = null;
 
@@ -21,6 +22,8 @@
     els.fileInput = $("#v3-file-input");
     els.error = $("#v3-error");
     els.encoding = $("#v3-encoding") || $('select[name="encoding"]');
+    els.bankProfile = $("#v3-bank-profile") || $('select[name="bank_profile"]');
+    els.descriptionStyle = $("#v3-description-style") || $('select[name="description_style"]');
     els.decimalSep = $("#v3-decimal-sep") || $('select[name="decimal_sep"]');
     els.formatDates = $("#v3-format-dates");
     els.dateSeparator = $('input[name="date_separator"]');
@@ -48,6 +51,10 @@
     csvFromConvert: null,
     convertDelimiter: null,
     convertDecimalSep: null,
+    convertBankProfile: null,
+    convertDescriptionStyle: null,
+    previewSortKey: null,
+    previewSortDir: null,
   };
 
   function getEncoding() {
@@ -58,6 +65,12 @@
     if (radio) return radio.value === "\\t" ? "\t" : radio.value;
     return ";";
   }
+  function getBankProfile() {
+    return els.bankProfile ? els.bankProfile.value : "auto";
+  }
+  function getDescriptionStyle() {
+    return els.descriptionStyle ? els.descriptionStyle.value : "sepa_overboeking_with_description";
+  }
   function getDecimalSep() {
     return els.decimalSep ? els.decimalSep.value : ",";
   }
@@ -66,7 +79,7 @@
   }
   function getDateSeparator() {
     var radio = $('input[name="date_separator"]:checked');
-    return radio ? radio.value : "-";
+    return radio ? radio.value : "/";
   }
 
   function parseAmount(row, decimalSep) {
@@ -262,6 +275,132 @@
     return div.innerHTML;
   }
 
+  function cleanDescriptionComponent(value) {
+    var text = value == null ? "" : String(value);
+    text = text.replace(/\s+/g, " ").replace(/^[\s/]+|[\s/]+$/g, "");
+    var upper = text.toUpperCase();
+    if (!text || upper === "NOTPROVIDED" || upper === "NONREF" || upper === "NOREF" || upper === "N/A" || upper === "NA" || upper === "NONE") {
+      return "";
+    }
+    return text;
+  }
+
+  function firstDescriptionComponent(row) {
+    var counterpartyName = cleanDescriptionComponent(row.counterparty_name);
+    var existingDescription = cleanDescriptionComponent(row.description);
+    if (counterpartyName) {
+      if (GENERIC_COUNTERPARTY_NAMES[counterpartyName.toUpperCase()] && existingDescription) {
+        return existingDescription;
+      }
+      return counterpartyName;
+    }
+
+    var keys = ["card_terminal", "ultimate_creditor", "description", "cleared_description", "payment_description"];
+    for (var i = 0; i < keys.length; i++) {
+      var text = cleanDescriptionComponent(row[keys[i]]);
+      if (text) return text;
+    }
+    return "";
+  }
+
+  function isSepaOverboeking(row) {
+    return cleanDescriptionComponent(row.bank_transaction_label).toLowerCase().indexOf("sepa overboeking") !== -1;
+  }
+
+  function combineDescription(primary, detail) {
+    primary = cleanDescriptionComponent(primary);
+    detail = cleanDescriptionComponent(detail);
+    if (!primary) return detail;
+    if (!detail) return primary;
+    var primaryLower = primary.toLowerCase();
+    var detailLower = detail.toLowerCase();
+    if (primaryLower.indexOf(detailLower) !== -1 || detailLower.indexOf(primaryLower) !== -1) {
+      return primary;
+    }
+    return primary + " - " + detail;
+  }
+
+  function formatDescriptionForDisplay(row) {
+    var style = getDescriptionStyle();
+    var primary = firstDescriptionComponent(row || {});
+    var paymentDescription = cleanDescriptionComponent((row || {}).payment_description);
+    if (style === "counterparty_with_description") {
+      return combineDescription(primary, paymentDescription);
+    }
+    if (style === "sepa_overboeking_with_description" && isSepaOverboeking(row || {})) {
+      return combineDescription(primary, paymentDescription);
+    }
+    return primary || paymentDescription;
+  }
+
+  function getPreviewSortValue(row, key) {
+    if (key === "date") {
+      return parseDate(row.date || row.value_date || row.entry_date) || "";
+    }
+    if (key === "description") {
+      return formatDescriptionForDisplay(row).toLowerCase();
+    }
+    if (key === "amount") {
+      return parseAmount(row, getDecimalSep());
+    }
+    return "";
+  }
+
+  function previewRowsForDisplay(rows) {
+    var arr = (rows || []).map(function (row, index) {
+      return { row: row, index: index };
+    });
+    if (!state.previewSortKey || !state.previewSortDir) {
+      return arr.map(function (item) { return item.row; });
+    }
+    var key = state.previewSortKey;
+    var dir = state.previewSortDir === "desc" ? -1 : 1;
+    arr.sort(function (a, b) {
+      var av = getPreviewSortValue(a.row, key);
+      var bv = getPreviewSortValue(b.row, key);
+      var result = 0;
+      if (key === "amount") {
+        result = av === bv ? 0 : av < bv ? -1 : 1;
+      } else {
+        result = String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: "base" });
+      }
+      if (result === 0) result = a.index - b.index;
+      return result * dir;
+    });
+    return arr.map(function (item) { return item.row; });
+  }
+
+  function updatePreviewSortHeaders() {
+    $$("[data-v3-sort-header]").forEach(function (th) {
+      var key = th.getAttribute("data-v3-sort-header");
+      var active = key === state.previewSortKey && state.previewSortDir;
+      th.setAttribute("aria-sort", active ? (state.previewSortDir === "asc" ? "ascending" : "descending") : "none");
+    });
+    $$("[data-v3-sort-icon]").forEach(function (icon) {
+      var key = icon.getAttribute("data-v3-sort-icon");
+      if (key === state.previewSortKey && state.previewSortDir === "asc") {
+        icon.textContent = "arrow_upward";
+      } else if (key === state.previewSortKey && state.previewSortDir === "desc") {
+        icon.textContent = "arrow_downward";
+      } else {
+        icon.textContent = "unfold_more";
+      }
+    });
+  }
+
+  function togglePreviewSort(key) {
+    if (state.previewSortKey !== key) {
+      state.previewSortKey = key;
+      state.previewSortDir = "asc";
+    } else if (state.previewSortDir === "asc") {
+      state.previewSortDir = "desc";
+    } else {
+      state.previewSortKey = null;
+      state.previewSortDir = null;
+    }
+    updateUIFromState();
+  }
+
   function renderOverviewBreakdown(container, breakdownData, decimalSep) {
     if (!container) return;
     container.innerHTML = "";
@@ -405,10 +544,11 @@
     var tbody = els.previewTbody;
     var formatDatesIso = options.formatDatesIso !== false;
     var dateSeparator = options.dateSeparator || getDateSeparator();
-    var arr = rows || [];
+    var arr = previewRowsForDisplay(rows || []);
     var limit = options.limit != null ? options.limit : (PREVIEW_ROWS == null ? arr.length : PREVIEW_ROWS);
     if (!tbody) return;
     tbody.innerHTML = "";
+    updatePreviewSortHeaders();
     var slice = arr.slice(0, limit);
     for (var i = 0; i < slice.length; i++) {
       var row = slice[i];
@@ -418,16 +558,16 @@
       var amountRaw = row.signed_amount != null ? row.signed_amount : row.amount;
       var amountStr = amountRaw != null ? String(amountRaw) : "";
       var amountClass = (amountStr + "").indexOf("-") === 0 ? "text-red-500 dark:text-red-400" : "text-green-600 dark:text-green-400";
-      var desc = (row.cleared_description || row.description || "").substring(0, 80);
+      var desc = formatDescriptionForDisplay(row).substring(0, 80);
+      var paymentDescription = cleanDescriptionComponent(row.payment_description).substring(0, 80);
       var tr = document.createElement("tr");
       tr.className = "hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors" + (i % 2 ? " bg-slate-50/30 dark:bg-slate-800/20" : "");
       tr.innerHTML =
-        "<td class=\"px-6 py-3 text-slate-400\">" + escapeHtml(String(i + 1)) + "</td>" +
         "<td class=\"px-6 py-3 text-slate-700 dark:text-slate-300\">" + escapeHtml(displayDate) + "</td>" +
-        "<td class=\"px-6 py-3 text-slate-700 dark:text-slate-300\">" + escapeHtml(row.account || "") + "</td>" +
-        "<td class=\"px-6 py-3 text-right font-medium " + amountClass + "\">" + escapeHtml(amountStr) + "</td>" +
-        "<td class=\"px-6 py-3 text-slate-500\">" + escapeHtml(row.currency || "") + "</td>" +
         "<td class=\"px-6 py-3 text-slate-600 dark:text-slate-400 truncate max-w-[200px]\">" + escapeHtml(desc) + "</td>" +
+        "<td class=\"px-6 py-3 text-right font-medium " + amountClass + "\">" + escapeHtml(amountStr) + "</td>" +
+        "<td class=\"px-6 py-3 text-slate-600 dark:text-slate-400 truncate max-w-[180px]\">" + escapeHtml(row.counterparty_name || "") + "</td>" +
+        "<td class=\"px-6 py-3 text-slate-600 dark:text-slate-400 truncate max-w-[240px]\">" + escapeHtml(paymentDescription) + "</td>" +
         "<td class=\"px-6 py-3 text-slate-500\">" + escapeHtml(row.reference || "") + "</td>";
       tbody.appendChild(tr);
     }
@@ -514,6 +654,8 @@
     var delim = getDelimiter();
     fd.append("delimiter", delim);
     fd.append("decimal_sep", getDecimalSep());
+    fd.append("bank_profile", getBankProfile());
+    fd.append("description_style", getDescriptionStyle());
     return fetch("/api/convert", { method: "POST", body: fd })
       .then(function (r) { return r.json(); })
       .then(function (data) {
@@ -521,6 +663,10 @@
           showError(data.detail || "Request failed.");
           state.rows = [];
           state.csvFromConvert = null;
+          state.convertDelimiter = null;
+          state.convertDecimalSep = null;
+          state.convertBankProfile = null;
+          state.convertDescriptionStyle = null;
           updateUIFromState();
           return;
         }
@@ -528,6 +674,10 @@
           showError(data.detail || "No transactions found.");
           state.rows = [];
           state.csvFromConvert = null;
+          state.convertDelimiter = null;
+          state.convertDecimalSep = null;
+          state.convertBankProfile = null;
+          state.convertDescriptionStyle = null;
           updateUIFromState();
           return;
         }
@@ -535,6 +685,10 @@
         state.csvFromConvert = data.csv || null;
         state.convertDelimiter = getDelimiter();
         state.convertDecimalSep = getDecimalSep();
+        state.convertBankProfile = getBankProfile();
+        state.convertDescriptionStyle = getDescriptionStyle();
+        state.previewSortKey = null;
+        state.previewSortDir = null;
         showError("");
         updateUIFromState();
       });
@@ -567,7 +721,9 @@
       datesMatchBackendDefault &&
       state.csvFromConvert != null &&
       state.convertDelimiter === delim &&
-      state.convertDecimalSep === decSep
+      state.convertDecimalSep === decSep &&
+      state.convertBankProfile === getBankProfile() &&
+      state.convertDescriptionStyle === getDescriptionStyle()
     );
     if (useCached) {
       var blob = new Blob([state.csvFromConvert], { type: "text/csv;charset=utf-8" });
@@ -582,7 +738,12 @@
     fetch("/api/export", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rows: rowsForExportWithDateFormat(state.rows), delimiter: delim, decimal_sep: decSep }),
+      body: JSON.stringify({
+        rows: rowsForExportWithDateFormat(state.rows),
+        delimiter: delim,
+        decimal_sep: decSep,
+        description_style: getDescriptionStyle()
+      }),
     })
       .then(function (r) { return r.json(); })
       .then(function (data) {
@@ -601,12 +762,12 @@
   }
 
   function copyPreviewToClipboard() {
-    var rows = state.rows.slice();
+    var rows = previewRowsForDisplay(state.rows);
     if (rows.length === 0) {
       showError("No data to copy.");
       return;
     }
-    var headers = ["Row#", "Date", "Account (IBAN)", "Amount", "CCY", "Description", "Ref.ID"];
+    var headers = ["date", "description", "amount", "counterparty_name", "payment_description", "reference"];
     var lines = [headers.join("\t")];
     var formatIso = getFormatDatesIso();
     var dateSeparator = getDateSeparator();
@@ -616,12 +777,11 @@
       var displayDate = formatDateForDisplay(parseDate(dateStr), formatIso, dateSeparator);
       var amount = r.signed_amount != null ? r.signed_amount : r.amount;
       var cells = [
-        i + 1,
         displayDate,
-        r.account || "",
+        formatDescriptionForDisplay(r).substring(0, 80),
         amount != null ? amount : "",
-        r.currency || "",
-        (r.cleared_description || r.description || "").substring(0, 80),
+        r.counterparty_name || "",
+        cleanDescriptionComponent(r.payment_description).substring(0, 80),
         r.reference || "",
       ];
       lines.push(cells.join("\t"));
@@ -639,6 +799,10 @@
     state.csvFromConvert = null;
     state.convertDelimiter = null;
     state.convertDecimalSep = null;
+    state.convertBankProfile = null;
+    state.convertDescriptionStyle = null;
+    state.previewSortKey = null;
+    state.previewSortDir = null;
     showError("");
     if (els.fileInput) els.fileInput.value = "";
     updateUIFromState();
@@ -664,6 +828,17 @@
     if (els.resetBtn) els.resetBtn.addEventListener("click", reset);
     if (els.copyPreview) els.copyPreview.addEventListener("click", copyPreviewToClipboard);
     if (els.formatDates) els.formatDates.addEventListener("change", updateUIFromState);
+    if (els.descriptionStyle) els.descriptionStyle.addEventListener("change", updateUIFromState);
+    $$("[data-v3-sort-key]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        togglePreviewSort(btn.getAttribute("data-v3-sort-key"));
+      });
+    });
+    if (els.bankProfile) {
+      els.bankProfile.addEventListener("change", function () {
+        state.csvFromConvert = null;
+      });
+    }
     $$('input[name="date_separator"]').forEach(function (radio) {
       radio.addEventListener("change", updateUIFromState);
     });

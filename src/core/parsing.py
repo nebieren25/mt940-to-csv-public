@@ -33,6 +33,19 @@ CARD_METADATA_PATTERNS = {
     "card_transaction_number": r"TRANSACTIENR:\s*([A-Z0-9]+)",
 }
 
+ABN_FIELD_LABELS = {
+    "iban": "counterparty_iban",
+    "bic": "counterparty_bic",
+    "naam": "counterparty_name",
+    "omschrijving": "payment_description",
+    "kenmerk": "payment_reference",
+    "betalingskenm.": "payment_reference",
+    "machtiging": "mandate_reference",
+    "incassant": "creditor_id",
+    "voor": "ultimate_creditor",
+    "nr": "card_terminal_id",
+}
+
 
 def _parse_amount_str(s: str) -> str:
     """Normalize amount: comma to dot, return as string."""
@@ -97,6 +110,59 @@ def _strip_trailing_terminal_datetime(value: str) -> str:
         value,
     )
     return _normalize_space(value)
+
+
+def _append_wrapped_text(current: str, part: str) -> str:
+    """Append ABN wrapped text, joining obvious split words without a space."""
+    current = _normalize_space(current)
+    part = _normalize_space(part)
+    if not current:
+        return part
+    if not part:
+        return current
+    prev_token = current.split()[-1] if current.split() else ""
+    next_token = part.split()[0] if part.split() else ""
+    join_without_space = False
+    if current[-1:] in ("-", "/"):
+        join_without_space = True
+    elif prev_token and next_token and prev_token[-1:].isdigit() and next_token[:1].isdigit():
+        join_without_space = True
+    elif (
+        prev_token.isalpha()
+        and next_token.isalpha()
+        and prev_token.isupper()
+        and next_token.isupper()
+        and len(next_token) <= 6
+    ):
+        join_without_space = True
+    elif next_token[:1].islower():
+        join_without_space = True
+    return current + ("" if join_without_space else " ") + part
+
+
+def _empty_description_fields(description: str = "") -> dict[str, str]:
+    """Return the full description-field shape used by row builders."""
+    return {
+        "counterparty_name": "",
+        "counterparty_account": "",
+        "counterparty_iban": "",
+        "counterparty_bic": "",
+        "payment_reference": "",
+        "mandate_reference": "",
+        "creditor_id": "",
+        "purpose_code": "",
+        "return_reason": "",
+        "payment_description": "",
+        "ultimate_creditor": "",
+        "card_terminal": "",
+        "card_terminal_id": "",
+        "card_sequence_number": "",
+        "card_transaction_number": "",
+        "bank_transaction_label": "",
+        "description_format": "unstructured",
+        "supplementary": "",
+        "description": _normalize_space(description),
+    }
 
 
 def _extract_card_metadata(value: str) -> dict[str, str]:
@@ -209,20 +275,174 @@ def _parse_counterparty(value: str) -> dict[str, str]:
     }
 
 
+def _looks_like_abn_86(raw_86: str) -> bool:
+    """ABN AMRO STA/MT940 :86: lines start with a 4-digit sequence."""
+    return bool(re.match(r"^\s*\d{4}\s+", raw_86 or ""))
+
+
+def _canonical_abn_label(label: str) -> str:
+    """Normalize ABN label text to a stable dictionary key."""
+    return _normalize_space(label).lower()
+
+
+def _prepare_abn_86(raw_86: str) -> str:
+    """Remove ABN continuation markers and make field labels split-friendly."""
+    text = (raw_86 or "").replace("\r", " ").replace("\n", " ")
+    text = re.sub(r"\?\d{2}", " ", text)
+    label_pattern = (
+        r"(IBAN|BIC|Naam|Omschrijving|Kenmerk|Betalingskenm\\.?|"
+        r"Machtiging|Incassant|Voor)"
+    )
+    text = re.sub(rf"\s+({label_pattern}):", r" | \1:", text)
+    text = re.sub(r"\s*\|\s*", " | ", text)
+    return _normalize_space(text)
+
+
+def _split_abn_label(segment: str) -> tuple[str, str] | None:
+    """Return (label, value) when an ABN pipe segment starts with a known label."""
+    segment = _normalize_space(segment)
+    segment = re.sub(r"^\(\d{1,2}[-/]\d{1,2}\)\s*", "", segment)
+    m = re.match(
+        r"^(IBAN|BIC|Naam|Omschrijving|Kenmerk|Betalingskenm\\.?|"
+        r"Machtiging|Incassant|Voor):\s*(.*)$",
+        segment,
+        flags=re.IGNORECASE,
+    )
+    if not m:
+        return None
+    return _canonical_abn_label(m.group(1)), _normalize_space(m.group(2))
+
+
+def _clean_abn_card_terminal(value: str) -> tuple[str, str]:
+    """Return cleaned BEA merchant text and PAS sequence when present."""
+    text = _normalize_space(value)
+    card_sequence = ""
+    m = re.search(r"\bPAS\s*([A-Z0-9]+)\b", text, flags=re.IGNORECASE)
+    if m:
+        card_sequence = m.group(1).strip()
+    text = re.sub(r"\bPAS\s*[A-Z0-9]+\b", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b\d{1,2}[.-]\d{1,2}[.-]\d{2,4}/\d{1,2}[.:]\d{2}\b", " ", text)
+    text = text.replace(",", " ")
+    return _normalize_space(text), card_sequence
+
+
+def _extract_abn_description_fields(raw_86: str) -> dict[str, str]:
+    """Extract fields from ABN AMRO STA/MT940 unstructured :86: content."""
+    prepared = _prepare_abn_86(raw_86)
+    fields = _empty_description_fields()
+    fields["description_format"] = "abn"
+
+    m = re.match(r"^(?P<sequence>\d{4})\s+(?P<body>.*)$", prepared)
+    body = prepared
+    if m:
+        fields["supplementary"] = m.group("sequence")
+        body = m.group("body")
+
+    segments = [_normalize_space(part) for part in body.split("|") if _normalize_space(part)]
+    current_key = ""
+    unlabeled_parts: list[str] = []
+    transaction_label = ""
+
+    for idx, segment in enumerate(segments):
+        nr_match = re.search(r"\bNR:([A-Z0-9]+)", segment, flags=re.IGNORECASE)
+        if nr_match:
+            if not fields["card_terminal_id"]:
+                fields["card_terminal_id"] = nr_match.group(1)
+            segment = re.sub(r"\bNR:[A-Z0-9]+", " ", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\b\d{1,2}[.]\d{1,2}[.]\d{2,4}/\d{1,2}[.]\d{2}\b", " ", segment)
+            segment = _normalize_space(segment)
+            if not segment:
+                continue
+
+        parsed = _split_abn_label(segment)
+        if parsed:
+            label, value = parsed
+            key = ABN_FIELD_LABELS.get(label)
+            if key:
+                fields[key] = _append_wrapped_text(fields.get(key, ""), value)
+                current_key = key
+            continue
+
+        if idx == 0:
+            transaction_label = segment
+            nr_match = re.search(r"\bNR:([A-Z0-9]+)", transaction_label, flags=re.IGNORECASE)
+            if nr_match and not fields["card_terminal_id"]:
+                fields["card_terminal_id"] = nr_match.group(1)
+            transaction_label = re.sub(r"\bNR:[A-Z0-9]+", " ", transaction_label, flags=re.IGNORECASE)
+            transaction_label = re.sub(r"\b\d{1,2}[.]\d{1,2}[.]\d{2,4}/\d{1,2}[.]\d{2}\b", " ", transaction_label)
+            transaction_label = _normalize_space(transaction_label)
+            continue
+
+        if current_key:
+            fields[current_key] = _append_wrapped_text(fields.get(current_key, ""), segment)
+        else:
+            unlabeled_parts.append(segment)
+
+    if fields["counterparty_iban"]:
+        fields["counterparty_account"] = fields["counterparty_iban"]
+
+    fields["bank_transaction_label"] = transaction_label
+
+    if transaction_label.upper().startswith("BEA"):
+        terminal_text = " ".join(unlabeled_parts)
+        terminal_text = re.sub(r"^\(\d{1,2}[-/]\d{1,2}\)\s*", "", terminal_text)
+        terminal_text, card_sequence = _clean_abn_card_terminal(terminal_text)
+        fields["card_terminal"] = terminal_text
+        if card_sequence and not fields["card_sequence_number"]:
+            fields["card_sequence_number"] = card_sequence
+        if terminal_text:
+            fields["description"] = terminal_text
+    elif fields["counterparty_name"]:
+        fields["description"] = fields["counterparty_name"]
+    elif fields["payment_description"]:
+        fields["description"] = fields["payment_description"]
+    else:
+        fields["description"] = transaction_label or prepared
+
+    if fields["payment_reference"].upper() == "NOTPROVIDED":
+        fields["payment_reference"] = ""
+
+    for key in (
+        "counterparty_name",
+        "counterparty_account",
+        "counterparty_iban",
+        "counterparty_bic",
+        "payment_reference",
+        "mandate_reference",
+        "creditor_id",
+        "payment_description",
+        "ultimate_creditor",
+        "card_terminal",
+        "bank_transaction_label",
+        "description",
+    ):
+        fields[key] = _normalize_space(fields.get(key, ""))
+
+    return fields
+
+
 def _extract_description_fields(raw_86: str) -> dict[str, str]:
     """
     Split structured :86: details into CSV-friendly fields.
     The display description prefers a real counterparty name; for payment processors
     such as WORLDPAY it falls back to remittance or ultimate-creditor text.
     """
+    if _looks_like_abn_86(raw_86):
+        return _extract_abn_description_fields(raw_86)
+
     payment_reference = _normalize_space(_extract_structured_tag(raw_86, "EREF"))
     mandate_reference = _normalize_space(_extract_structured_tag(raw_86, "MARF"))
     creditor_id = _normalize_space(_extract_structured_tag(raw_86, "CSID"))
     purpose_code = _normalize_space(_extract_structured_tag(raw_86, "PURP"))
     return_reason = _normalize_space(_extract_structured_tag(raw_86, "RTRN"))
     payment_description = _clean_payment_description(_extract_structured_tag(raw_86, "REMI"))
+    original_payment_description = payment_description
     card_metadata = _extract_card_metadata(payment_description)
     payment_description = card_metadata["cleaned_text"] or payment_description
+    has_card_details = (
+        any(card_metadata[key] for key in CARD_METADATA_PATTERNS)
+        or card_metadata["cleaned_text"] != original_payment_description
+    )
     ultimate_creditor = _clean_payment_description(_extract_structured_tag(raw_86, "ULTC"))
     counterparty = _parse_counterparty(_extract_structured_tag(raw_86, "CNTP"))
 
@@ -242,6 +462,7 @@ def _extract_description_fields(raw_86: str) -> dict[str, str]:
         display_description = _shorten_payment_description(raw_86)
 
     return {
+        **_empty_description_fields(),
         **counterparty,
         "payment_reference": payment_reference,
         "mandate_reference": mandate_reference,
@@ -250,10 +471,12 @@ def _extract_description_fields(raw_86: str) -> dict[str, str]:
         "return_reason": return_reason,
         "payment_description": payment_description,
         "ultimate_creditor": ultimate_creditor,
-        "card_terminal": card_metadata["cleaned_text"],
+        "card_terminal": card_metadata["cleaned_text"] if has_card_details else "",
         "card_terminal_id": card_metadata["card_terminal_id"],
         "card_sequence_number": card_metadata["card_sequence_number"],
         "card_transaction_number": card_metadata["card_transaction_number"],
+        "bank_transaction_label": "",
+        "description_format": "structured" if (raw_86 or "").startswith("/") else "unstructured",
         "description": _normalize_space(display_description),
     }
 
@@ -387,6 +610,7 @@ def parse_mt940_custom(content: str, encoding: str = "utf-8") -> tuple[list[dict
                 "currency": statement_currency,
                 "debit_credit": dc,
                 "transaction_type": transaction_details["transaction_type"],
+                "bank_transaction_label": description_fields["bank_transaction_label"],
                 "customer_ref": transaction_details["customer_ref"],
                 "bank_ref": transaction_details["bank_ref"],
                 "counterparty_name": description_fields["counterparty_name"],
@@ -404,8 +628,8 @@ def parse_mt940_custom(content: str, encoding: str = "utf-8") -> tuple[list[dict
                 "card_terminal_id": description_fields["card_terminal_id"],
                 "card_sequence_number": description_fields["card_sequence_number"],
                 "card_transaction_number": description_fields["card_transaction_number"],
-                "description_format": "structured" if raw_86.startswith("/") else "unstructured",
-                "supplementary": "",
+                "description_format": description_fields["description_format"],
+                "supplementary": description_fields["supplementary"],
                 "account": account,
                 "statement_number": statement_number,
                 "transaction_reference": transaction_reference,
