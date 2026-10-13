@@ -11,6 +11,7 @@ The project follows a hexagonal-style layout: the core package contains parsing 
 - Preview converted transactions in the browser.
 - Export CSV with configurable encoding, delimiter, and decimal separator.
 - Compute financial summary data for uploaded statements.
+- Parse Knab MT940 counterparty details and signed balances for each statement page; recognize Knab in Auto mode.
 - Enforce optional upload and row limits through environment variables.
 
 ## Installation
@@ -67,6 +68,8 @@ PYTHONPATH=. uvicorn src.web_app:app --reload --host 127.0.0.1 --port 8181
 
 Typical flow: select an MT940 file, convert it, review the preview table, adjust encoding, delimiter, or decimal options, then download the CSV.
 
+Knab statements work with either **Auto** or **Knab** as the bank profile. Counterparty names, IBAN/BBAN, BIC, transaction labels, and remittance details are exported separately. Opening and closing balances belong to the statement page containing each transaction, including intermediate `60M`/`62M` pages. Changing the bank profile after uploading a file reruns conversion; Reset releases the file held in the browser.
+
 ## Docker
 
 Build and run the production container:
@@ -120,6 +123,7 @@ mt-copy-public/
 │   ├── core/             # Domain logic: parsing, conversion, summaries
 │   │   ├── domain.py     # CSV headers and MT940 description tags
 │   │   ├── parsing.py    # Custom MT940 parser and parsing helpers
+│   │   ├── knab.py       # Knab fields and statement page balances
 │   │   ├── library_adapter.py   # mt-940 library wrapper
 │   │   ├── convert.py    # Content-to-rows and rows-to-CSV helpers
 │   │   ├── csv_parse.py  # CSV upload parsing
