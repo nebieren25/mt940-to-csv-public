@@ -34,6 +34,10 @@ Form fields:
 - `encoding`: input encoding
 - `delimiter`: output CSV delimiter
 - `decimal_sep`: output decimal separator
+- `bank_profile`: `auto` (default), `ing`, `abn`, `rabo`, `knab`, or `raw`
+- `description_style`: `sepa_overboeking_with_description` (default), `counterparty`, or `counterparty_with_description`
+
+`auto` recognizes Knab account identifiers or statement headers. The Knab parser separates counterparty fields and remittance information, preserves wrapped descriptions, and assigns signed opening/closing balances from each statement page, including intermediate `60M`/`62M` pages. `date` and `value_date` remain the value date; `entry_date` remains the separately supplied month/day.
 
 Response fields:
 
@@ -56,6 +60,9 @@ JSON fields:
 - `rows`
 - `delimiter`
 - `decimal_sep`
+- `description_style`
+
+Export formats existing rows; it does not reparse the source. To change the bank profile, call `/api/convert` again with the original file.
 
 Use `?format=csv` to receive CSV directly.
 

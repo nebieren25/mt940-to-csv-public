@@ -15,6 +15,7 @@ from src.core.domain import (
     DESCRIPTION_STYLES,
 )
 from src.core.library_adapter import parse_with_library
+from src.core.knab import looks_like_knab_content, parse_knab_mt940
 from src.core.parsing import GENERIC_COUNTERPARTY_NAMES, parse_mt940_custom
 
 
@@ -60,7 +61,7 @@ def _first_description_component(row: dict) -> str:
 
 
 def _is_sepa_overboeking(row: dict) -> bool:
-    """ABN STA labels Dutch bank transfers as 'SEPA Overboeking'."""
+    """ABN and Knab label Dutch bank transfers as 'SEPA Overboeking'."""
     label = _clean_component(row.get("bank_transaction_label")).casefold()
     return "sepa overboeking" in label
 
@@ -119,6 +120,8 @@ def _parse_rows_for_profile(
 ) -> tuple[list[dict] | None, str | None]:
     """Parse content using the requested bank/parser profile."""
     profile = _normalize_option(bank_profile, BANK_PROFILES, DEFAULT_BANK_PROFILE)
+    if profile == "knab" or (profile == "auto" and looks_like_knab_content(content)):
+        return parse_knab_mt940(content, encoding)
     custom_first = profile in {"abn", "raw"} or (profile == "auto" and _looks_like_abn_content(content))
 
     if custom_first:

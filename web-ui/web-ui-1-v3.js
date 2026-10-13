@@ -21,6 +21,13 @@
   function cacheEls() {
     els.fileInput = $("#v3-file-input");
     els.error = $("#v3-error");
+    if (els.error) {
+      els.status = document.createElement("p");
+      els.status.className = "text-sm text-slate-500 dark:text-slate-400 mt-2";
+      els.status.setAttribute("role", "status");
+      els.status.setAttribute("aria-live", "polite");
+      els.error.parentNode.insertBefore(els.status, els.error.nextSibling);
+    }
     els.encoding = $("#v3-encoding") || $('select[name="encoding"]');
     els.bankProfile = $("#v3-bank-profile") || $('select[name="bank_profile"]');
     els.descriptionStyle = $("#v3-description-style") || $('select[name="description_style"]');
@@ -47,6 +54,9 @@
   }
 
   var state = {
+    sourceFile: null,
+    conversionRequestId: 0,
+    isConverting: false,
     rows: [],
     csvFromConvert: null,
     convertDelimiter: null,
@@ -593,6 +603,13 @@
   function updateUIFromState() {
     var rows = state.rows;
     var n = rows.length;
+    if (els.status) {
+      els.status.textContent = state.isConverting ? "Converting file…" : "";
+      els.status.style.display = state.isConverting ? "block" : "none";
+    }
+    if (els.fileInput) els.fileInput.setAttribute("aria-busy", String(state.isConverting));
+    if (els.downloadBtn) els.downloadBtn.disabled = state.isConverting || n === 0;
+    if (els.copyPreview) els.copyPreview.disabled = state.isConverting || n === 0;
     if (els.rowCount) els.rowCount.textContent = n;
     renderPreviewTable(rows, { formatDatesIso: getFormatDatesIso(), dateSeparator: getDateSeparator() });
     if (n === 0) {
@@ -646,50 +663,71 @@
     if (els.volumeBreakdown) renderVolumeBreakdown(els.volumeBreakdown, countBreakdown);
   }
 
+  function clearConversionResults() {
+    state.rows = [];
+    state.csvFromConvert = null;
+    state.convertDelimiter = null;
+    state.convertDecimalSep = null;
+    state.convertBankProfile = null;
+    state.convertDescriptionStyle = null;
+    state.previewSortKey = null;
+    state.previewSortDir = null;
+  }
+
   function convertFile(file) {
-    if (!file) return Promise.reject(new Error("No file"));
+    if (!file) return Promise.resolve();
+    var requestId = ++state.conversionRequestId;
+    var options = {
+      encoding: getEncoding(),
+      delimiter: getDelimiter(),
+      decimalSep: getDecimalSep(),
+      bankProfile: getBankProfile(),
+      descriptionStyle: getDescriptionStyle(),
+    };
+    state.sourceFile = file;
+    state.isConverting = true;
+    clearConversionResults();
+    showError("");
+    updateUIFromState();
     var fd = new FormData();
     fd.append("file", file);
-    fd.append("encoding", getEncoding());
-    var delim = getDelimiter();
-    fd.append("delimiter", delim);
-    fd.append("decimal_sep", getDecimalSep());
-    fd.append("bank_profile", getBankProfile());
-    fd.append("description_style", getDescriptionStyle());
+    fd.append("encoding", options.encoding);
+    fd.append("delimiter", options.delimiter);
+    fd.append("decimal_sep", options.decimalSep);
+    fd.append("bank_profile", options.bankProfile);
+    fd.append("description_style", options.descriptionStyle);
     return fetch("/api/convert", { method: "POST", body: fd })
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        return r.json().then(function (data) {
+          if (!r.ok) {
+            var detail = typeof data.detail === "string" ? data.detail : "HTTP " + r.status;
+            throw new Error(detail || "Request failed.");
+          }
+          return data;
+        });
+      })
       .then(function (data) {
-        if (data.detail && !data.success) {
-          showError(data.detail || "Request failed.");
-          state.rows = [];
-          state.csvFromConvert = null;
-          state.convertDelimiter = null;
-          state.convertDecimalSep = null;
-          state.convertBankProfile = null;
-          state.convertDescriptionStyle = null;
-          updateUIFromState();
-          return;
-        }
+        if (requestId !== state.conversionRequestId) return;
+        state.isConverting = false;
         if (!data.success) {
           showError(data.detail || "No transactions found.");
-          state.rows = [];
-          state.csvFromConvert = null;
-          state.convertDelimiter = null;
-          state.convertDecimalSep = null;
-          state.convertBankProfile = null;
-          state.convertDescriptionStyle = null;
           updateUIFromState();
           return;
         }
         state.rows = data.rows || [];
         state.csvFromConvert = data.csv || null;
-        state.convertDelimiter = getDelimiter();
-        state.convertDecimalSep = getDecimalSep();
-        state.convertBankProfile = getBankProfile();
-        state.convertDescriptionStyle = getDescriptionStyle();
-        state.previewSortKey = null;
-        state.previewSortDir = null;
+        state.convertDelimiter = options.delimiter;
+        state.convertDecimalSep = options.decimalSep;
+        state.convertBankProfile = options.bankProfile;
+        state.convertDescriptionStyle = options.descriptionStyle;
         showError("");
+        updateUIFromState();
+      })
+      .catch(function (e) {
+        if (requestId !== state.conversionRequestId) return;
+        state.isConverting = false;
+        clearConversionResults();
+        showError("Request failed: " + (e.message || "Unknown error"));
         updateUIFromState();
       });
   }
@@ -710,12 +748,14 @@
   }
 
   function onDownloadCsv() {
+    if (state.isConverting) return;
     if (state.rows.length === 0) {
       showError("No data to download. Upload an MT940 or CSV file first.");
       return;
     }
     var delim = getDelimiter();
     var decSep = getDecimalSep();
+    var requestId = state.conversionRequestId;
     var datesMatchBackendDefault = getFormatDatesIso() === false && getDateSeparator() === "-";
     var useCached = (
       datesMatchBackendDefault &&
@@ -747,6 +787,7 @@
     })
       .then(function (r) { return r.json(); })
       .then(function (data) {
+        if (requestId !== state.conversionRequestId || state.isConverting) return;
         if (data.detail) { showError(data.detail); return; }
         var blob = new Blob([data.csv], { type: "text/csv;charset=utf-8" });
         var a = document.createElement("a");
@@ -757,6 +798,7 @@
         showError("");
       })
       .catch(function (e) {
+        if (requestId !== state.conversionRequestId || state.isConverting) return;
         showError("Download failed: " + (e.message || "Unknown error"));
       });
   }
@@ -795,14 +837,10 @@
   }
 
   function reset() {
-    state.rows = [];
-    state.csvFromConvert = null;
-    state.convertDelimiter = null;
-    state.convertDecimalSep = null;
-    state.convertBankProfile = null;
-    state.convertDescriptionStyle = null;
-    state.previewSortKey = null;
-    state.previewSortDir = null;
+    state.conversionRequestId++;
+    state.sourceFile = null;
+    state.isConverting = false;
+    clearConversionResults();
     showError("");
     if (els.fileInput) els.fileInput.value = "";
     updateUIFromState();
@@ -814,14 +852,14 @@
     if (els.fileInput) {
       els.fileInput.addEventListener("change", function () {
         var file = els.fileInput.files && els.fileInput.files[0];
-        if (file) convertFile(file).catch(function (e) { showError("Request failed: " + (e.message || "Unknown error")); });
+        if (file) convertFile(file);
       });
       els.fileInput.addEventListener("dragover", function (e) { e.preventDefault(); e.stopPropagation(); });
       els.fileInput.addEventListener("drop", function (e) {
         e.preventDefault();
         e.stopPropagation();
         var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-        if (file) convertFile(file).catch(function (err) { showError("Request failed: " + (err.message || "Unknown error")); });
+        if (file) convertFile(file);
       });
     }
     if (els.downloadBtn) els.downloadBtn.addEventListener("click", onDownloadCsv);
@@ -836,7 +874,7 @@
     });
     if (els.bankProfile) {
       els.bankProfile.addEventListener("change", function () {
-        state.csvFromConvert = null;
+        if (state.sourceFile) convertFile(state.sourceFile);
       });
     }
     $$('input[name="date_separator"]').forEach(function (radio) {
